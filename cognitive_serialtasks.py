@@ -51,7 +51,7 @@ from tqdm import tqdm, trange
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
 my_parser.add_argument('exp_name',
-                       default='cognitive_obs',
+                       default='cognitive_obs2',
                        type=str, nargs='?',
                        help='Experiment name, also used to create the path to save results')
 my_parser.add_argument('use_gates',
@@ -67,7 +67,7 @@ my_parser.add_argument('train_to_criterion',
                        type=int,
                        help='TODO')
 my_parser.add_argument('--experiment_type',
-                       default='cognitive_observer', nargs='?',
+                       default='shuffle_with_gates', nargs='?',
                        type=str,
                        help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed',
@@ -129,7 +129,7 @@ config.gates_gaussian_cut_off = args.var2
 
 config.FILEPATH += exp_name +'/'
 config.save_model = False
-config.load_saved_rnn1 = True
+config.load_saved_rnn1 = False
 config.load_trained_cog_obs = False
 config.save_detailed = True
 config.use_external_inputs_mask = False
@@ -176,6 +176,14 @@ if args.experiment_type == 'random_gates': # Task aware algorithm. Improved CL b
     config.train_to_criterion = True
     config.use_rehearsal = True
     config.use_gates = True
+if args.experiment_type == 'shuffle_with_gates': # Task aware algorithm. Improved CL but impaired FT
+    config.same_rnn = True
+    config.train_to_criterion = True
+    config.use_rehearsal = False
+    config.use_gates = True
+    config.random_rehearsals = 300
+    config.max_trials_per_task = config.batch_size
+
 if args.experiment_type == 'random_gates_no_rehearsal': # Task aware algorithm. Improved CL but impaired FT
     config.same_rnn = True
     config.train_to_criterion = True
@@ -204,6 +212,7 @@ if args.experiment_type == 'CaiNet': # Chapter 3.
     config.use_CaiNet = True
     config.use_md_optimizer = True
     config.abandon_model = False
+
     
 if args.experiment_type == 'cognitive_observer': # Chapter 2.
     config.same_rnn = True
@@ -227,10 +236,10 @@ if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
 
 # config.set_tasks((np.array(config.tasks)[:2]).tolist())
 
-task_seq = [config.tasks_id_name[i] for i in range(14)]
+task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
 # Add tasks gradually with rehearsal 1 2 1 2 3 1 2 3 4 ...
 if config.use_rehearsal:
-    task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, len(config.tasks_id_name)+1)] # interleave tasks and add one task at a time
+    task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
     # for sub_seq in task_sub_seqs: 
         # random.shuffle(sub_seq)
         # task_seq+=sub_seq
@@ -238,14 +247,21 @@ if config.use_rehearsal:
     # task_seq+=sub_seq # One additional final rehearsal, 
     # task_seq += [config.tasks_id_name[i] for i in range(14)]
 else:
-    task_seq = [config.tasks_id_name[i] for i in range(len(config.tasks_id_name))]
+    task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
 # Now adding many random rehearsals:
-sub_seq = [config.tasks_id_name[i] for i in range(len(config.tasks_id_name))]
+sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
 Random_rehearsals = 20 if not config.load_saved_rnn1 and (config.use_cognitive_observer or config.use_CaiNet )else 5
+if args.experiment_type == 'shuffle_with_gates': 
+    Random_rehearsals   = config.random_rehearsals 
+    
 for _ in range(Random_rehearsals):
     random.shuffle(sub_seq)
     task_seq+=sub_seq
 
+if args.experiment_type == 'shuffle_with_gates': # add the last task from the unlearned pile:
+    no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
+    novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
+    task_seq+= config.tasks_id_name()
 # main loop
 
 def create_model():
@@ -334,7 +350,10 @@ def train(config, task_seq):
     step_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
-    
+        
+        #if the last task in shuffle training_ extend it to 400 trials
+
+
         env = envs[task_id]
         bar_tasks.set_description('i: ' + str(step_i))
         testing_log.switch_trialxxbatch.append(step_i)
