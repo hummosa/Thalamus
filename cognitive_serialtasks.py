@@ -51,7 +51,7 @@ from tqdm import tqdm, trange
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
 my_parser.add_argument('exp_name',
-                       default='cognitive_obs2',
+                       default='cognitive_obs',
                        type=str, nargs='?',
                        help='Experiment name, also used to create the path to save results')
 my_parser.add_argument('use_gates',
@@ -67,7 +67,7 @@ my_parser.add_argument('train_to_criterion',
                        type=int,
                        help='TODO')
 my_parser.add_argument('--experiment_type',
-                       default='shuffle_with_gates', nargs='?',
+                       default='cognitive_observer', nargs='?',
                        type=str,
                        help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed',
@@ -87,7 +87,7 @@ my_parser.add_argument('--var3',
                         type=float,
                         help='tau')
 my_parser.add_argument('--num_of_tasks',
-                    default=15, nargs='?',
+                    default=5, nargs='?',
                     type=int,
                     help='number of tasks to train on')
 my_parser.add_argument('--use_cog_obs',
@@ -129,7 +129,7 @@ config.gates_gaussian_cut_off = args.var2
 
 config.FILEPATH += exp_name +'/'
 config.save_model = False
-config.load_saved_rnn1 = False
+config.load_saved_rnn1 = True 
 config.load_trained_cog_obs = False
 config.save_detailed = True
 config.use_external_inputs_mask = False
@@ -179,6 +179,9 @@ if args.experiment_type == 'random_gates': # Task aware algorithm. Improved CL b
 if args.experiment_type == 'shuffle_with_gates': # Task aware algorithm. Improved CL but impaired FT
     config.same_rnn = True
     config.train_to_criterion = True
+    config.train_to_plateau = False
+    config.paradigm_shuffle = True
+    config.paradigm_sequential = not config.paradigm_shuffle
     config.use_rehearsal = False
     config.use_gates = True
     config.random_rehearsals = 300
@@ -211,9 +214,7 @@ if args.experiment_type == 'CaiNet': # Chapter 3.
     config.use_cognitive_observer = False
     config.use_CaiNet = True
     config.use_md_optimizer = True
-    config.abandon_model = False
-
-    
+    config.abandon_model = False  
 if args.experiment_type == 'cognitive_observer': # Chapter 2.
     config.same_rnn = True
     config.train_to_criterion = True
@@ -226,10 +227,10 @@ config.exp_signature = config.exp_signature + f'_{"corr" if config.load_gates_co
 
 
 ###--------------------------Training configs--------------------------###
+rng = np.random.default_rng(int(args.seed))
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
     #Shuffle tasks
     if True:
-        rng = np.random.default_rng(int(args.seed))
         idx = rng.permutation(range(len(config.tasks)))
         config.set_tasks((np.array(config.tasks)[idx]).tolist())
         config.tasks_id_name = config.tasks # assigns the order to tasks_id_name but retains the standard task_id
@@ -261,7 +262,7 @@ for _ in range(Random_rehearsals):
 if args.experiment_type == 'shuffle_with_gates': # add the last task from the unlearned pile:
     no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
     novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
-    task_seq+= config.tasks_id_name()
+    task_seq+= config.tasks_id_name[novel_task_id]
 # main loop
 
 def create_model():

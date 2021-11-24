@@ -24,10 +24,10 @@ class CTRNN_MD(nn.Module):
         self.input_size =  config.input_size
         self.hidden_size = config.hidden_size
         self.output_size = config.output_size
-        self.num_task = config.num_task
         self.md_size = config.md_size
-        self.use_external_input_mask = config.use_external_inputs_mask
-        self.use_multiplicative_gates = config.use_gates
+        self.use_multiplicative_gates = config.use_multiplicative_gates
+        self.use_additive_gates = config.use_additive_gates
+
         self.device = config.device
         self.g = .5 # Conductance for recurrents. Consider higher values for realistic richer RNN dynamics, at least initially.
 
@@ -49,6 +49,16 @@ class CTRNN_MD(nn.Module):
             self.gates = self.gates_mask
             # self.register_parameter(name='gates', param=torch.nn.Parameter(self.gates_mask))
             # import pdb; pdb.set_trace()
+        if self.use_additive_gates:
+            # self.gates = torch.normal(config.md_mean'], 1., size=(config.md_size'], config.hidden_size'], ),
+            #   dtype=torch.float) #.type(torch.LongTensor) device=self.device,
+            # control density /
+            self.add_gates = torch.zeros(size=(config.md_size, config.hidden_size, )) 
+            self.add_gates = torch.nn.init.xavier_uniform_(self.add_gates, gain=nn.init.calculate_gain('relu')).to(config.device).float()
+            self.gates = self.add_gates
+
+            # self.gates_mask = (self.gates_mask < config.MD2PFC_prob).astype(float)
+            # self.gates_mask = torch.from_numpy(self.gates_mask).to(config.device).float() #* torch.abs(self.gates) 
           
             # torch.uniform(config.md_mean'], 1., size=(config.md_size'], config.hidden_size'], ),
             #  device=self.device, dtype=torch.float)
@@ -84,11 +94,15 @@ class CTRNN_MD(nn.Module):
         rec_input = self.h2h(hidden)
 
         if self.use_multiplicative_gates:
-            #TODO restructure to have sub_id already passed per trial in a batch, and one_hot encoded [batch, md_size]
             batch_sub_encoding = sub_id 
             gates = torch.matmul(batch_sub_encoding.to(self.device), self.gates)
             rec_input = torch.multiply( gates, rec_input)
-            # import pdb; pdb.set_trace()
+        if self.use_additive_gates:
+            #TODO get the id
+            batch_sub_encoding = sub_id 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.gates)
+            rec_input = torch.add( gates, rec_input)
+        
         pre_activation = ext_input + rec_input
         
         h_new = torch.relu(hidden * self.oneminusalpha + pre_activation * self.alpha)
@@ -137,3 +151,16 @@ class RNN_MD(nn.Module):
         rnn_activity = self.drop_layer(rnn_activity)
         out = self.fc(rnn_activity)
         return out, rnn_activity
+
+class Cognitive_Net(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(Cognitive_Net, self).__init__()
+        # self.bn = nn.BatchNorm1d(input_size)
+        self.gru = nn.GRU(input_size, hidden_size, batch_first=False)
+        self.linear = nn.Linear(hidden_size, output_size)
+
+    def forward(self, inp):
+        # inp = self.bn(inp)
+        out, hidden = self.gru(inp)
+        x = self.linear(out)
+        return x, out

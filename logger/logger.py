@@ -26,14 +26,21 @@ class PFCMDLogger(BaseLogger):
 class SerialLogger(object):
     def __init__(self, config):
         self.losses = []
+        self.frustrations = []
         self.stamps = []
         self.accuracies = []
         self.fix_perfs = []
         self.act_perfs = []
         self.switch_trialxxbatch = []
         self.switch_task_id = []
+        self.trials_to_crit =[]
         self.gradients = []
-        
+        self.cog_obs_preds = []
+        self.bu_context_ids = []
+        self.td_context_ids = []
+        self.md_context_ids = []
+        self.md_grads = []
+
         for _ in range(len(config.tasks)):
             self.fix_perfs.append([])
             self.act_perfs.append([])
