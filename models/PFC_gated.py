@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 import matplotlib.pyplot as plt
-from utils import stats
+from utils import sparse_with_mean, stats
 
 class CTRNN_MD(nn.Module):
     """Continuous-time RNN that can take MD inputs.
@@ -43,22 +43,30 @@ class CTRNN_MD(nn.Module):
             # self.gates = torch.normal(config.md_mean'], 1., size=(config.md_size'], config.hidden_size'], ),
             #   dtype=torch.float) #.type(torch.LongTensor) device=self.device,
             # control density /
-            self.gates_mask = np.random.uniform(0, 1, size=(config.md_size, config.hidden_size, )) 
-            self.gates_mask = (self.gates_mask < config.MD2PFC_prob).astype(float)
-            self.gates_mask = torch.from_numpy(self.gates_mask).to(config.device).float() #* torch.abs(self.gates) 
-            self.gates = self.gates_mask
-            # self.register_parameter(name='gates', param=torch.nn.Parameter(self.gates_mask))
+
+            # simple binary gates:
+            # self.init_mul_gates = np.random.uniform(0, 1, size=(config.md_size, config.hidden_size, )) 
+            # self.init_mul_gates = (self.init_mul_gates < config.MD2PFC_prob).astype(float)
+            # self.init_mul_gates = torch.from_numpy(self.init_mul_gates).to(config.device).float() #* torch.abs(self.gates) 
+            # self.gates = self.init_mul_gates
+            
+            # Gaussian with sparsity gates
+            self.init_mul_gates = torch.empty((config.md_size, config.hidden_size, )) 
+            sparse_with_mean(self.init_mul_gates, config.gates_sparsity, config.gates_mean, config.gates_std)
+            self.init_mul_gates = torch.nn.functional.relu(self.init_mul_gates)
+            self.register_parameter(name='mul_gates', param=torch.nn.Parameter(self.init_mul_gates))
             # import pdb; pdb.set_trace()
         if self.use_additive_gates:
             # self.gates = torch.normal(config.md_mean'], 1., size=(config.md_size'], config.hidden_size'], ),
             #   dtype=torch.float) #.type(torch.LongTensor) device=self.device,
             # control density /
-            self.add_gates = torch.zeros(size=(config.md_size, config.hidden_size, )) 
-            self.add_gates = torch.nn.init.xavier_uniform_(self.add_gates, gain=nn.init.calculate_gain('relu')).to(config.device).float()
-            self.gates = self.add_gates
+            self.init_add_gates = torch.zeros(size=(config.md_size, config.hidden_size, )) 
+            self.init_add_gates = torch.nn.init.xavier_uniform_(self.init_add_gates, gain=nn.init.calculate_gain('relu')).to(config.device).float()
+            # self.gates = self.add_gates
+            self.register_parameter(name='add_gates', param=torch.nn.Parameter(self.init_add_gates))
 
-            # self.gates_mask = (self.gates_mask < config.MD2PFC_prob).astype(float)
-            # self.gates_mask = torch.from_numpy(self.gates_mask).to(config.device).float() #* torch.abs(self.gates) 
+            # self.init_mul_gates = (self.init_mul_gates < config.MD2PFC_prob).astype(float)
+            # self.init_mul_gates = torch.from_numpy(self.init_mul_gates).to(config.device).float() #* torch.abs(self.gates) 
           
             # torch.uniform(config.md_mean'], 1., size=(config.md_size'], config.hidden_size'], ),
             #  device=self.device, dtype=torch.float)
@@ -94,13 +102,12 @@ class CTRNN_MD(nn.Module):
         rec_input = self.h2h(hidden)
 
         if self.use_multiplicative_gates:
-            batch_sub_encoding = sub_id 
-            gates = torch.matmul(batch_sub_encoding.to(self.device), self.gates)
+            batch_sub_encoding = sub_id # already onehot encoded. Skipping this step. 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
             rec_input = torch.multiply( gates, rec_input)
         if self.use_additive_gates:
-            #TODO get the id
             batch_sub_encoding = sub_id 
-            gates = torch.matmul(batch_sub_encoding.to(self.device), self.gates)
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.add_gates)
             rec_input = torch.add( gates, rec_input)
         
         pre_activation = ext_input + rec_input

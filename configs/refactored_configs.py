@@ -85,10 +85,15 @@ class BaseConfig(object):
         self.hidden_size = 356
         self.output_size = 17
         self.tau= 200
-        self.MD2PFC_prob = 0.5
-        self.gates_gaussian_cut_off = -0.3
         self.lr = 1e-3
 
+        #gates statis
+        self.train_gates = False
+        self.gates_sparsity = 0.5
+        self.gates_mean = 1.
+        self.gates_std = 0.5
+        self.gates_gaussian_cut_off = -0.3
+        self.MD2PFC_prob = 0.5
         # test & plot
         self.test_every_trials = 500
         self.test_num_trials = 30

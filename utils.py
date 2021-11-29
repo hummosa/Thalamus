@@ -376,6 +376,8 @@ def get_trials_batch(envs, batch_size, config):
     labels = (F.one_hot(labels, num_classes=config.output_size)).float() 
     return (inputs.permute([1,0,2]), labels.permute([1,0,2])) # using time first [time, batch, input]
 
+
+
 # In[16]:
 import matplotlib.pyplot as plt
 def show_input_output(inputs, labels, outputs=None, axes=None, ex_id=0):

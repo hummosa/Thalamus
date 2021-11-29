@@ -35,15 +35,13 @@ from neurogym.utils.scheduler import RandomSchedule
 from models.PFC_gated import RNN_MD, Cognitive_Net
 from configs.refactored_configs import *
 from logger.logger import SerialLogger
-from utils import stats, get_trials_batch, get_performance, accuracy_metric
+from utils import stats, get_trials_batch, get_performance, accuracy_metric, sparse_with_mean
 # visualization
 import matplotlib as mpl
 mpl.rcParams['axes.spines.left'] = True
 mpl.rcParams['axes.spines.right'] = False
 mpl.rcParams['axes.spines.top'] = False
 mpl.rcParams['axes.spines.bottom'] = True
-# mpl.rcParams['pdf.fonttype'] = 42
-# mpl.rcParams['ps.fonttype'] = 42
 import matplotlib.pyplot as plt
 import seaborn as sns
 import imageio
@@ -52,14 +50,14 @@ from tqdm import tqdm, trange
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
 my_parser.add_argument('exp_name',  default='temp', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
-# my_parser.add_argument('--experiment_type', default='shuffle_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=1, nargs='?', type=int, help='unused ')
-my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=100, nargs='?', type=float, help='tau')
-my_parser.add_argument('--var4', default=1, nargs='?', type=int,  help='var 1')
-my_parser.add_argument('--num_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--var1',  default=1., nargs='?', type=float, help='gates mean ')
+# my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
+my_parser.add_argument('--var3',  default=0.01, nargs='?', type=float, help='gates std')
+my_parser.add_argument('--var4', default=0.5, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 
 # Get args and set config
@@ -94,13 +92,22 @@ if args.experiment_type == 'random_gates_no_rehearsal': # Task aware algorithm. 
 
 ############################################
 config.set_strings( exp_name)
-config.exp_signature = ''#f"{args.var2:1.1f}_{args.var3:1.1f}_"
+config.exp_signature = f"{args.var1:1.1f}_{args.var3:1.1f}_{args.var4:1.1f}_"
 config.num_of_tasks = args.num_of_tasks
 config.saved_model_sig = f'seed{args.seed}_paradigm_{"shuf" if config.paradigm_shuffle else "seq"}_{"mul" if config.use_multiplicative_gates else "add"}_tasks_{config.num_of_tasks}_'
 config.exp_signature = config.saved_model_sig +  config.exp_signature #+ f'_{"corr" if config.load_gates_corr else "nocorr"}_{"co" if config.use_cognitive_observer else "noc"}_{"reh" if config.use_rehearsal else "noreh"}_{"tc" if config.train_to_criterion else "nc"}_{"mul" if config.use_multiplicative_gates else "add"}_{"gates" if config.use_gates else "nog"}'
+config.saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
+config.saved_gates_path = './data/'+ f'saved_gates_{config.saved_model_sig}.torch'
+config.gates_mean = args.var1
+config.gates_std = args.var3
+config.gates_sparsity = args.var4
+config.train_gates = False
+
 config.higher_order = True
 if config.higher_order:
     config.random_rehearsals = 10
+    config.save_model = False
+    config.load_saved_rnn1 = True
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
     #Shuffle tasks
@@ -131,18 +138,20 @@ elif config.paradigm_shuffle:
 task_seq_sequential = []
 no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
 if no_of_tasks_left > 0: novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
+# learn one novel task then rehearse previously learned + novel task
+task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
 
-if config.use_rehearsal:
-    to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)
+# if config.use_rehearsal:
+#     to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)
 
-    task_sub_seqs = [[config.tasks_id_name[i] for i in range(args.num_of_tasks, s)] for s in range(args.num_of_tasks+2, to_no)] # interleave tasks and add one task at a time
-    for sub_seq in task_sub_seqs: 
-        # task_seq_sequential = np.concatenate([task_seq, np.stack(sub_seq)])
-        task_seq_sequential +=sub_seq
-    task_seq_sequential +=sub_seq # one last rehearsal
-else:
-    # task_seq = np.concatenate([task_seq, np.stack(config.tasks_id_name)[-no_of_tasks_left:]])
-    task_seq_sequential = (config.tasks_id_name)[-no_of_tasks_left:]
+#     task_sub_seqs = [[config.tasks_id_name[i] for i in range(args.num_of_tasks, s)] for s in range(args.num_of_tasks+2, to_no)] # interleave tasks and add one task at a time
+#     for sub_seq in task_sub_seqs: 
+#         # task_seq_sequential = np.concatenate([task_seq, np.stack(sub_seq)])
+#         task_seq_sequential +=sub_seq
+#     task_seq_sequential +=sub_seq # one last rehearsal
+# else:
+#     # task_seq = np.concatenate([task_seq, np.stack(config.tasks_id_name)[-no_of_tasks_left:]])
+#     task_seq_sequential = (config.tasks_id_name)[-no_of_tasks_left:]
 
 # Now adding many random rehearsals:
 task_seq_random = []
@@ -159,37 +168,44 @@ net.to(config.device)
 training_log = SerialLogger(config=config)
 testing_log = SerialLogger(config=config)
 
+if config.load_saved_rnn1:
+    net.load_state_dict(torch.load(config.saved_model_path))
+    # net.rnn.gates = torch.load(config.saved_gates_path)
 
-testing_log, training_log, net = train(config, net, task_seq, testing_log, training_log , step_i = 0 )
+else:
+    config.criterion_shuffle_paradigm = 0.9
+    testing_log, training_log, net = train(config, net, task_seq, testing_log, training_log , step_i = 0 )
+    config.criterion_shuffle_paradigm = 10 # raise it too high so it is no longer stopping training. 
+       
+    if not config.higher_order: # run the novel task sequential test
 
-if  not config.higher_order:
+        config.print_every_batches = 1
+        config.train_to_criterion = True
+        config.max_trials_per_task = 100000
+        step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
+        training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
+   
+        testing_log, training_log, net = train(config, net, task_seq_sequential, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
+   
+    else: # jump into random pre-training and save the net
+        testing_log, training_log, net = train(config, net, task_seq_random, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
+        if config.save_model:
+            print(' Saving RNN1 to: ----', config.saved_model_path)
+            torch.save(net.state_dict(), config.saved_model_path)
+
+
+if config.higher_order:
+    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.output_size, hidden_size=1, output_size = config.md_size)
+    cog_net.to(config.device)
+
+    step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
+    training_log.start_optimizing_at , testing_log.start_optimizing_at = step_i, step_i
+    
     if config.paradigm_shuffle:
         config.print_every_batches = 10
         config.train_to_criterion = True
         config.max_trials_per_task = 40000
-    testing_log, training_log, net = train(config, net, task_seq_sequential, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
-else:
-    testing_log, training_log, net = train(config, net, task_seq_random, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
-        
-
-
-saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
-saved_gates_path = './data/'+ f'saved_gates_{config.saved_model_sig}.torch'
-if config.save_model:
-    print(' Saving RNN1 to: ----', saved_model_path)
-    # torch.save(net.state_dict(), saved_model_path)
-    # torch.save(net.rnn.gates, saved_gates_path)
-if config.load_saved_rnn1:
-# saved_model_path = './data/cognitive_obs/saved_model_0_-0.3_100.0__corr_co_reh_tc_mul_gates.torch'
-    net.load_state_dict(torch.load(saved_model_path))
-    net.rnn.gates = torch.load(saved_gates_path)
-    # except:
-        # raise Exception('No model file found!')
- 
-if config.use_cognitive_observer:
-    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.output_size, hidden_size=1, output_size = config.md_size)
-    cog_net.to(config.device)
-
+    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_random, testing_log, training_log, step_i = step_i )
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
@@ -198,22 +214,6 @@ print('testing logs saved to : '+ './files/'+ config.exp_name+f'/testing_log_{co
 
 
 ## Plots
-
-# plot the corr for comparison. Reorder them to standarized order.
-
-# fig, ax = plt.subplots(1,1)
-# standard_order = np.argsort(idx) # even accuracies are saved in standard order already, also envs
-# ordered_corrmat = np.corrcoef(tnp)
-# ax.matshow(ordered_corrmat)
-# # numbered = [n for (i,n) in enumerate(np.array(config.human_task_names))] #[0,1,2,11,10,12,3,7,4,8,9,5,13,6,14]
-# ax.set_xticks(range(num_tasks))
-# _=ax.set_xticklabels(config.human_task_names, rotation = 90)
-# ax.set_yticks(range(num_tasks))
-# _=ax.set_yticklabels(config.human_task_names, rotation = 0)
-# # now learn again, but this time the presence of the corr file will be detected and converted to proper gates
-
-# In[9]:
-
 import matplotlib
 no_of_values = len(config.tasks)
 norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
@@ -282,5 +282,5 @@ ax.set_xlim([0, max_x])
 
 
 final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
-plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{testing_log.total_batches}_{final_accuracy_average:1.2f}.jpg', dpi=300)
+plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{training_log.stamps[-1]}_{final_accuracy_average:1.2f}.jpg', dpi=300)
 
