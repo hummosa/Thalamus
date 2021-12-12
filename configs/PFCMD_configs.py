@@ -13,7 +13,7 @@ Class names of configs are based on the class names of models:
 class BaseConfig(object):
     def __init__(self, args= []):
         # system
-        self.device = 'cuda'
+        self.device = 'cpu'
         self.ROOT_DIR = os.getcwd()
 
 
@@ -42,7 +42,8 @@ class BaseConfig(object):
                     ] 
         # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
-        self.tasks = self._tasks
+        # Moving this line below as other things need defined first
+        # self.tasks = self._tasks
         # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
         self.num_of_tasks = len(self.tasks)
@@ -55,15 +56,12 @@ class BaseConfig(object):
         self.MatchFamily = ['yang19.dms-v0', 'yang19.dmc-v0', 'yang19.dnms-v0', 'yang19.dnmc-v0']
         
         # MD
-        self.MDeffect = False
-        self.md_size = len(self.tasks)
-        self.md_active_size = 2
         self.md_dt = 0.001
 
         self.use_lstm = False
 
         self.env_kwargs = {'dt': 100}
-        self.batch_size = 100
+        self.batch_size = 1
 
         #  training paradigm
         self.max_trials_per_task = 40000
@@ -78,16 +76,17 @@ class BaseConfig(object):
         self.no_shuffled_trials = 40000
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
-        
 
         # RNN model
         self.input_size = 33
-        self.hidden_size = 356
         self.output_size = 17
         self.tau= 200
         self.lr = 1e-3
 
         #gates statis
+        self.load_corr_gates = False
+        self.MDeffect_mul = True # turns on or off the multiplicative MD effects
+        self.MDeffect_add = False # turns on or off the additive MD effects
         self.train_gates = False
         self.gates_sparsity = 0.5
         self.gates_mean = 1.2
@@ -96,11 +95,37 @@ class BaseConfig(object):
         self.MD2PFC_prob = 0.5
         # test & plot
         self.test_every_trials = 500
-        self.test_num_trials = 30
+        self.test_num_trials = 1
         self.plot_every_trials = 4000
         self.args= args
 
-    
+################### New stuff from CL_neurogym    
+        self.max_trials_per_task = 10000
+
+        self.hidden_size = 600
+
+        self.hidden_ctx_size = 400 # 450
+        # self.sub_size = 200 # 150
+        self.sub_active_size = 50 # this config is deprecated right now
+        self.sub_active_prob = 0.50
+        self.hidden_ctx_noise = 0.01
+        # MD
+        self.MDeffect = True
+        self.md_active_size = 1
+        self.md_dt = 0.001
+        self.MDtoPFC_connect_prob = 1.00 # original 1.00
+
+        self.tasks = self._tasks
+        
+
+        # save variables
+        self.FILENAME = {
+                        'config':    'config_PFCMD.npy',
+                        'log':       f'log_PFCMD_{self.num_of_tasks}.npy',
+                        'net':       'net_PFCMD.pt',
+                        'plot_perf': f'performance_PFCMD_tasks{self.num_of_tasks}.png',
+        }
+
     ############################################
         self.save_trained_model = True
         self.save_model = False
@@ -127,6 +152,11 @@ class BaseConfig(object):
     def tasks(self,tasks):
         self._tasks = tasks
         self.tasks_id_name = tasks # uses the property setter below to rearrange tasks_id_name to the new order but keep consistent the task ids
+        self.num_of_tasks = len(tasks)
+        # self.total_trials = int(self.max_trials_per_task * (self.num_of_tasks + 1)) # 70000
+        self.sub_size = self.hidden_ctx_size//self.num_of_tasks # 150
+        self.md_size = self.num_of_tasks # 3
+
 
     @property
     def tasks_id_name(self):

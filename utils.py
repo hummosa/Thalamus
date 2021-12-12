@@ -242,6 +242,7 @@ def get_args_from_parser(my_parser):
 
     return (args)
 
+
 def stats(var, var_name=None):
     if type(var) == type([]): # if a list
         var = np.array(var)
@@ -375,7 +376,6 @@ def get_trials_batch(envs, batch_size, config):
     # index -> one-hot vector
     labels = (F.one_hot(labels, num_classes=config.output_size)).float() 
     return (inputs.permute([1,0,2]), labels.permute([1,0,2])) # using time first [time, batch, input]
-
 
 
 # In[16]:

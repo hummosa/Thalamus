@@ -532,7 +532,7 @@ def train(config, task_seq):
             # plt.close('all')
             # save loss
 
-            training_log.write_basic(step_i, loss.item(), acc)
+            training_log.write_basic(step_i, loss.item(), acc, task_id)
             training_log.gradients.append(np.array([torch.norm(p.grad).item() for p in net.parameters() if p.grad is not None]) )
             if config.save_detailed or config.use_cognitive_observer:
                 training_log.write_detailed( rnn_activity= rnn_activity.detach().cpu().numpy().mean(0),
@@ -540,7 +540,6 @@ def train(config, task_seq):
                 outputs = outputs.detach().cpu().numpy()[-1, :, :],
                 labels =   labels.detach().cpu().numpy()[-1, :, :],
                 sampled_act = [], # rnn_activity.detach().cpu().numpy()[:,:, 1:356:36], # Sample about 10 neurons 
-                task_id =task_id,
                 # rnn_activity.shape             torch.Size([15, 100, 356])
                 )
             ################################################

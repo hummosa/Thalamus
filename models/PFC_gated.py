@@ -102,7 +102,7 @@ class CTRNN_MD(nn.Module):
         rec_input = self.h2h(hidden)
 
         if self.use_multiplicative_gates:
-            batch_sub_encoding = sub_id # already onehot encoded. Skipping this step. 
+            batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
             gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
             rec_input = torch.multiply( gates, rec_input)
         if self.use_additive_gates:

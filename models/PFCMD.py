@@ -58,23 +58,13 @@ class MD_GYM():
         # self.wMD2PFC = np.random.normal(0,
         #                                 1 / np.sqrt(self.md_size * self.hidden_size),
         #                                 size=(self.hidden_size, self.md_size))
-        self.wMD2PFC = np.zeros(shape=(self.hidden_size, self.md_size))
-        for i in range(self.wMD2PFC.shape[0]):
-            j = np.floor(np.random.rand()*self.md_size).astype(int)
-            self.wMD2PFC[i, j] = -5
+        # self.wMD2PFC = np.zeros(shape=(self.hidden_size, self.md_size))
+        # for i in range(self.wMD2PFC.shape[0]):
+        #     j = np.floor(np.random.rand()*self.md_size).astype(int)
+        #     self.wMD2PFC[i, j] = -5
         
-        ### Relaxing the separation.
-        # stats(self.gates)
-        # Mean, -2.45417, var 6.24790, min -5.000, max 0.000, norm 121.34661099511597
-        # stats(self.wMD2PFC)
-        # Mean, -2.50000, var 6.25000, min -5.000, max 0.000, norm 122.47448713915891
-
             
-            # Binary gates formulation:
-
-        
-
-
+        # Binary gates formulation:
         # self.wMD2PFCMult = get_corr_gates(self.mul_gates, self.config)
         config = self.config
         import os
@@ -118,6 +108,13 @@ class MD_GYM():
         # self.wMD2PFCMult = np.random.normal(0,
                                             # 1 / np.sqrt(self.md_size * self.hidden_size),
                                             # size=(self.hidden_size, self.md_size))
+        for i in range(self.wMD2PFC.shape[0]):
+            if np.random.rand() < self.config.MDtoPFC_connect_prob:
+                j = np.floor(np.random.rand()*self.md_size).astype(int)
+                self.wMD2PFC[i, j] = 5 # +5, dis-inhibition version # -5, invert version
+        self.wMD2PFCMult = np.random.normal(0,
+                                            1 / np.sqrt(self.md_size * self.hidden_size),
+                                            size=(self.hidden_size, self.md_size))
         # Hebbian learning mask
         self.wPFC2MDdelta_mask = np.ones(shape=(self.md_size, self.hidden_ctx_size))
         self.MD_mask = np.array([])
@@ -182,12 +179,12 @@ class MD_GYM():
 
         # compute binary pretraces
         # mean
-        # self.MDpreTrace_threshold = np.mean(self.MDpreTrace)
-        # self.MDpreTrace_binary = (self.MDpreTrace>self.MDpreTrace_threshold).astype(float)
-        # 1. mean of small part
-        pretrace_part = int(0.8*len(self.MDpreTrace))
-        self.MDpreTrace_threshold = np.mean(np.sort(self.MDpreTrace)[0:pretrace_part])
+        self.MDpreTrace_threshold = np.mean(self.MDpreTrace)
         self.MDpreTrace_binary = (self.MDpreTrace>self.MDpreTrace_threshold).astype(float)
+        # 1. mean of small part
+        # pretrace_part = int(1.0*len(self.MDpreTrace))
+        # self.MDpreTrace_threshold = 1.0 * np.mean(np.sort(self.MDpreTrace)[0:pretrace_part])
+        # self.MDpreTrace_binary = (self.MDpreTrace>self.MDpreTrace_threshold).astype(float)
         # 2. mean of big part
         # pretrace_part = int(0.8*len(self.MDpreTrace))
         # self.MDpreTrace_threshold = np.mean(np.sort(self.MDpreTrace)[-pretrace_part:])
@@ -203,15 +200,18 @@ class MD_GYM():
         # self.MDpreTrace_binary = (self.MDpreTrace_filtered>self.MDpreTrace_threshold).astype(float)
         
         # compute thresholds
-        # self.MDpreTrace_binary_threshold = np.mean(self.MDpreTrace_binary)
-        self.MDpreTrace_binary_threshold = 0.5
+        self.MDpreTrace_binary_threshold = 0.6 * np.mean(self.MDpreTrace_binary)
         MDoutTrace_threshold = 0.5
         
         # update and clip the PFC context -> MD weights
-        wPFC2MDdelta = 0.5 * self.Hebb_learning_rate * np.outer(MDoutTrace - MDoutTrace_threshold, self.MDpreTrace_binary - self.MDpreTrace_binary_threshold)
-        self.wPFC2MDdelta_mask = 5e-2 * np.exp(np.log(1/5e-2) * np.outer(MDoutTrace, self.MDpreTrace_binary))
-        wPFC2MDdelta = wPFC2MDdelta * self.wPFC2MDdelta_mask
-        self.wPFC2MD = np.clip(self.wPFC2MD + wPFC2MDdelta, 0., 1.)
+        wPFC2MDdelta = 0.5 * 0.2 * self.Hebb_learning_rate * np.outer(MDoutTrace - MDoutTrace_threshold, self.MDpreTrace_binary - self.MDpreTrace_binary_threshold)
+            # deprecated
+            # no using binary pretrace
+            # wPFC2MDdelta = 0.5 * self.Hebb_learning_rate * np.outer(MDoutTrace - MDoutTrace_threshold, self.MDpreTrace - self.MDpreTrace_threshold)
+            # Hebbian learning rate is a fucntion of pre and post traces
+            # self.wPFC2MDdelta_mask = 0.5 * np.exp(np.log(1/0.5) * np.outer(MDoutTrace, self.MDpreTrace_binary))
+            # wPFC2MDdelta = wPFC2MDdelta * self.wPFC2MDdelta_mask
+        self.wPFC2MD = np.clip(self.wPFC2MD + wPFC2MDdelta, 0., 2.)
 
     def winner_take_all(self, MDinp):
         '''Winner take all on the MD
@@ -292,10 +292,10 @@ class CTRNN_MD(nn.Module):
             # sensory input -> PFC context layer
             self.input2PFCctx = nn.Linear(self.input_size, self.hidden_ctx_size, bias=False)
             # MD layer
-            self.md = MD_GYM(config, positiveRates=True)
-            self.md.md_output = np.zeros(self.md_size)
-            index = np.random.permutation(self.md_size)
-            self.md.md_output[index[:self.md_active_size]] = 1 # randomly set part of md_output to 1
+            self.md = MD_GYM(positiveRates=True, config=config)
+            self.md.md_output = np.zeros(config.md_size)
+            index = np.random.permutation(config.md_size)
+            self.md.md_output[index[:config.md_active_size]] = 1 # randomly set part of md_output to 1
             self.md.md_output_t = np.array([])
         
         self.reset_parameters()
@@ -349,7 +349,7 @@ class CTRNN_MD(nn.Module):
         # self.h2h.weight.data = torch.block_diag(*weights)
 
         # random orthogonal noise
-        # nn.init.orthogonal_(self.h2h.weight, gain=0.5)
+        # nn.init.orthogonal_(self.h2h.weight, gain=np.sqrt(2)) # torch.nn.init.calculate_gain() returns the recommended gain value
 
         # all uniform noise
         # k = (1./self.hidden_size)**0.5
@@ -393,6 +393,8 @@ class CTRNN_MD(nn.Module):
             for batch_idx in range(ext_input_mask.shape[0]):
                 ext_input_mask[batch_idx, sub_id*self.sub_size:(sub_id+1)*self.sub_size][mask_idx] = 1
             PFC_ctx_input = torch.relu(ext_input_ctx.mul(ext_input_mask) + (self.config.hidden_ctx_noise)*torch.randn(ext_input_ctx.size()))
+            # save PFC-ctx activity
+            self.PFC_ctx_act = PFC_ctx_input
 
         # md inputs
         if self.MDeffect:
@@ -412,8 +414,8 @@ class CTRNN_MD(nn.Module):
             # self.md.md_output = self.md(hidden.cpu().detach().numpy()[0, :])
             self.md.md_output = self.md(PFC_ctx_input.cpu().detach().numpy()[0, :])
             # md2pfc = np.dot((self.md.wMD2PFC/self.md.md_size), np.logical_not(self.md.md_output).astype(float))
-            md2pfc = np.dot((self.md.wMD2PFC/self.md.md_size), (self.md.md_output).astype(float))
             md2pfc_mul = np.dot((self.md.wMD2PFCMult), (self.md.md_output).astype(float))
+            md2pfc = np.dot((self.md.wMD2PFC/self.md.md_size), self.md.md_output) - 5/self.md.md_size # - 5/self.md.md_size, the base level of inhibition; check the initialization of wMD2PFC to understand "5" # md2pfc = np.dot((self.md.wMD2PFC/self.md.md_size), np.logical_not(self.md.md_output).astype(float)) # invert version
             md2pfc = torch.from_numpy(md2pfc).view_as(hidden).to(input.device)
             md2pfc_mul = torch.from_numpy(md2pfc_mul).view_as(hidden).to(input.device)
 
@@ -461,6 +463,7 @@ class CTRNN_MD(nn.Module):
         # initialize variables for saving network activities
         output = []
         if self.MDeffect:
+            self.PFC_ctx_acts = np.zeros(shape=(num_tsteps, self.hidden_ctx_size))
             self.md.md_preTraces = np.zeros(shape=(num_tsteps, self.hidden_ctx_size))
             self.md.md_preTraces_binary = np.zeros(shape=(num_tsteps, self.hidden_ctx_size))
             self.md.md_preTrace_thresholds = np.zeros(shape=(num_tsteps, 1))
@@ -474,6 +477,7 @@ class CTRNN_MD(nn.Module):
             output.append(hidden)
             # save MD activities
             if self.MDeffect:
+                self.PFC_ctx_acts[i, :] = self.PFC_ctx_act.detach().numpy()
                 self.md.md_preTraces[i, :] = self.md.MDpreTrace
                 self.md.md_preTraces_binary[i, :] = self.md.MDpreTrace_binary
                 self.md.md_preTrace_thresholds[i, :] = self.md.MDpreTrace_threshold
@@ -529,8 +533,10 @@ class RNN_MD(nn.Module):
         self.fc = nn.Linear(config.hidden_size, config.output_size)
         self.md_activities = []
 
-    def forward(self, x, task_id):
-        rnn_activity, _, md_mean_activity = self.rnn(x, sub_id=task_id)
+    def forward(self, x, sub_id):
+        sub_id = torch.argmax(sub_id)
+        rnn_activity, _, md_mean_activity = self.rnn(x, sub_id=sub_id)
         rnn_activity = self.drop_layer(rnn_activity)
         out = self.fc(rnn_activity)
-        return out, rnn_activity, md_mean_activity
+        self.md_activities.append(md_mean_activity)
+        return out, rnn_activity
