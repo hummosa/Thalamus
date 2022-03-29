@@ -8,6 +8,7 @@ import gym
 import neurogym as ngym
 import matplotlib.pyplot as plt
 from utils import stats, get_trials_batch, get_performance, accuracy_metric
+from Schizophrenia.tasks_coded_in_neurogym import NoiseyMean, Shrew_task
 
 def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     # criterion & optimizer
@@ -25,7 +26,25 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
-        envs[task_id] = gym.make(task_name, **config.env_kwargs)
+        if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']:
+            params = {
+                'noisy_mean':       [0.05, 0, 0 , 0], 
+                'drifting_mean':    [0.05, 0.05, 0 , 0],
+                'oddball':          [0.05,  0.05, 0.1, 0],
+                'changepoint':      [0.05, 0.0, 0.0 , 0.1]
+            }
+            param= params[task_name]
+            envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
+        elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either']:
+            if task_name == 'shrew_task_audition':
+                envs[task_id] = Shrew_task(dt =10, attend_to='audition')
+            if task_name == 'shrew_task_vision':
+                envs[task_id] = Shrew_task(dt =10, attend_to='vision')
+            else:
+                envs[task_id] = Shrew_task(dt =10, attend_to='either')
+
+        else: # assume a neurogym yang19 task:
+            envs[task_id] = gym.make(task_name, **config.env_kwargs)
 
     task_i = 0
     bar_tasks = tqdm(task_seq)

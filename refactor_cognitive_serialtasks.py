@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-use_PFCMD = True
+use_PFCMD = False
 # system
 import os
 import sys
@@ -20,24 +20,17 @@ import math
 import numpy as np
 # rng = np.random.default_rng()
 import random
-import pandas as pd
 import torch
 import torch.nn as nn
-from torch.nn import init
 from torch.nn import functional as F
 # tasks
-
 import gym
 import neurogym as ngym
 from neurogym.wrappers import ScheduleEnvs
 from neurogym.utils.scheduler import RandomSchedule
 # models
-if use_PFCMD:
-    from models.PFCMD import RNN_MD
-    from configs.PFCMD_configs import *
-else:
-    from models.PFC_gated import RNN_MD
-    from configs.refactored_configs import *
+from models.PFC_gated import RNN_MD
+from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
 from logger.logger import SerialLogger
 from train import train, optimize
@@ -57,7 +50,8 @@ import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
 my_parser.add_argument('exp_name',  default='temp', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='random_gates_both', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='random_gates_both', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
@@ -83,20 +77,23 @@ if args.experiment_type == 'rehearsal':  # introduce first time learning vs subs
         config.same_rnn = True
         config.train_to_criterion = True
         config.use_rehearsal = True
-if args.experiment_type == 'random_gates_mul': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'random_gates_mul': 
     config = Gates_mul_config()
-if args.experiment_type == 'random_gates_add': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'random_gates_add': 
     config = Gates_add_config()
-if args.experiment_type == 'random_gates_both': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'random_gates_both': 
     config = Gates_add_config()
     config.use_multiplicative_gates =True
-if args.experiment_type == 'shuffle_mul': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'shuffle_mul': 
     config = Shuffle_mul_config()
-if args.experiment_type == 'shuffle_add': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'shuffle_add': 
     config = Shuffle_add_config()
-if args.experiment_type == 'random_gates_no_rehearsal': # Task aware algorithm. Improved CL but impaired FT
+if args.experiment_type == 'random_gates_no_rehearsal': 
     config = Gates_no_rehearsal_config()
-
+if args.experiment_type == 'shrew_task': 
+    config = Schizophrenia_config()
+    args.num_of_tasks = 4
+    config.train_to_criterion = True
 
 ############################################
 config.set_strings( exp_name)
@@ -154,9 +151,10 @@ elif config.paradigm_shuffle:
 # add, at the end, the last 3 tasks from the unlearned pile:
 task_seq_sequential = []
 no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
-if no_of_tasks_left > 0: novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
-# learn one novel task then rehearse previously learned + novel task
-task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
+if no_of_tasks_left > 0: 
+    novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
+    # learn one novel task then rehearse previously learned + novel task
+    task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
 
 # if config.use_rehearsal:
 #     to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)

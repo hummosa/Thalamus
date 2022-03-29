@@ -7,6 +7,7 @@ import numpy as np
 rng = np.random.default_rng()
 import matplotlib.pyplot as plt
 
+outcome_scale = 100
 ## Refactor
 def get_oddball_trials(numOutcomes=200, sigma = 20, Haz=.125, safe=2, screenWidth=300, drift = 7.5):
     '''# numOutcomes     #how long should the block of trials be?
@@ -50,7 +51,7 @@ def get_oddball_trials(numOutcomes=200, sigma = 20, Haz=.125, safe=2, screenWidt
             s=max([s-1, 0]) # decrement no of safe trials left.
             
         distMean[i]=mean
-    return(distMean,outcome)
+    return(distMean/outcome_scale,outcome/outcome_scale)
 
 distMean, outcome = get_oddball_trials()
 plt.plot(distMean, '--k')
@@ -88,7 +89,7 @@ def get_Change_point_trials(numOutcomes=200, sigma = 20, Haz=.125, safe=8, scree
             outcome[i]=np.round(rng.normal(mean, sigma))
         s=max([s-1, 0]) # decrement no of safe trials left.
         distMean[i]=mean
-    return(distMean,outcome)
+    return(distMean/outcome_scale,outcome/outcome_scale)
 
 distMean, outcome = get_Change_point_trials(sigma=5, screenWidth=40)
 # distMean, outcome = get_trials(numOutcomes= seq_len, sigma=3, screenWidth=screenWidth-1)
@@ -163,7 +164,8 @@ class GRUBCell(nn.Module):
         self.init_mul_gates = torch.empty((self.z_size )) 
         # sparse_with_mean(self.init_mul_gates, config.gates_sparsity, config.gates_mean, config.gates_std)
         self.init_mul_gates = torch.nn.functional.relu(self.init_mul_gates)
-        self.register_parameter(name='z', param=torch.nn.Parameter(self.init_mul_gates))
+        # self.register_parameter(name='z', param=torch.nn.Parameter(self.init_mul_gates))
+        self.z =torch.nn.Parameter(self.init_mul_gates)
 
         self.x2h = nn.Linear(input_size, 3 * hidden_size, bias=bias)
         self.h2h = nn.Linear(hidden_size, 3 * hidden_size, bias=bias)
@@ -181,7 +183,7 @@ class GRUBCell(nn.Module):
         resetgate = torch.sigmoid(i_r + h_r)
         # TAKE ONLY 2 gating vars, discard the rest of resetgate values.
         if self.z_size > 0:
-            self.z.data = resetgate[:, :self.z_size].data
+            self.z.data = resetgate[:, :self.z_size]
             resetgate = self.z2r(self.z)
         inputgate = torch.sigmoid(i_i + h_i)
         newgate = torch.tanh(i_n + (resetgate * h_n))
@@ -191,13 +193,16 @@ class GRUBCell(nn.Module):
         return (hy, self.z)
 
 class GRUModel(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, layer_dim=1,  bias=True):
+    def __init__(self, input_dim, hidden_dim, output_dim,  bias=True):
         super(GRUModel, self).__init__()
         self.hidden_dim = hidden_dim
-        self.layer_dim = layer_dim
         # self.rnn = GRUCell(input_dim, hidden_dim)
         self.rnn = GRUBCell(input_dim, hidden_dim)
-        # self.fc = nn.Linear(hidden_dim, output_dim)
+
+        self.relu1 = nn.ReLU()
+        self.relu2 = nn.ReLU()
+        self.linear = nn.Linear(hidden_dim, output_dim)
+        self.linearloss = nn.Linear(hidden_dim, output_dim)
         self.zs_block = []
 
     def forward(self, x):
@@ -207,29 +212,32 @@ class GRUModel(nn.Module):
 
         for seq in range(x.size(1)):
             hn, zn = self.rnn(x[:, seq, :], hn)
-            outs.append(hn)
-            zs.append(zn)
+            hn = self.relu1(hn)
+            out = self.linear(hn)
+            out = self.relu2(out)
+            outloss = self.linearloss(hn)
+            outloss = self.relu2(outloss)
+            gt_mse = nn.functional.mse_loss(out.detach(), x[:, seq, :].detach(), reduction='none')
+
+            # optm 
+            optz.zero_grad()
+            lossloss = nn.functional.mse_loss(outloss , gt_mse)
+            z_grad = torch.autograd.grad(outputs= lossloss, inputs=self.rnn.z, 
+                only_inputs=True, create_graph=True, retain_graph=True)[0]
+            self.rnn.z = nn.Parameter(self.rnn.z - 0.1 * z_grad.detach()) 
+            # print('does z require grad: ', self.rnn.z.requires_grad)
+	    # lossloss.backward(retain_graph=True)
+            # optz.param_groups[0]['lr'] = 0.1
+            # optz.step()
+            # self.rnn.z2r.get_parameter('weight').detach_()
+            # self.rnn.z2r.get_parameter('bias').detach_()
+
+            outs.append(out)
+            zs.append(zn.detach().cpu().numpy())
 
         outx = torch.stack(outs, 1)
-        self.zs_block = torch.stack(zs, 1)
+        self.zs_block = np.stack(zs, 1)
         return (outx, outx[:,-1,:])
-
-class RNN_out(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
-        super().__init__()
-        # self.bn = nn.BatchNorm1d(input_size)
-        # self.gru = nn.GRU(input_size, hidden_size, batch_first=True)
-        self.gru = GRUModel(input_size, hidden_size, output_size)
-        self.relu = nn.ReLU()
-        self.relu2 = nn.ReLU()
-        self.linear = nn.Linear(hidden_size, output_size)
-
-    def forward(self, inp):
-        # inp = self.bn(inp)
-        out, _ = self.gru(inp)
-        x = self.linear(self.relu(out))
-        x = self.relu2(x)
-        return x*100, out
 
 def get_batch(exp_type='Oddball', batch_size=batch_size):
     batches, distMeans = [], []
@@ -248,15 +256,15 @@ def get_batch(exp_type='Oddball', batch_size=batch_size):
 
 def test_model(exp_type):
     # torch.set_grad_enabled(False)
-    with torch.no_grad():
-        distMeans, batch = get_batch(exp_type)
-        input = batch[:, :-1, :]
-        output = batch[:, -1, :]
+    #with torch.no_grad():
+    distMeans, batch = get_batch(exp_type)
+    input = batch[:, :-2, :]
+    output = batch[:, -1, :]
 
-        pred, _ = rnn(input.float())
-        acc = (10*pred[:, -1,]) - (output)
-        acc = torch.abs(acc) < 4 # consider anthing within 4 steps away as accurate.
-        acc = torch.mean(acc.float())
+    pred, _ = rnn(input.float())
+    acc = (pred[:, -1,]) - (output)
+    acc = torch.abs(acc) < .1 # consider anthing within 4 steps away as accurate.
+    acc = torch.mean(acc.float())
     plt.close('all')
     fig, ax = plt.subplots(1,1)
     # ax = axes.flatten()[0]
@@ -265,7 +273,7 @@ def test_model(exp_type):
     ax.plot(pred.detach().cpu().numpy()[-1,  ], '.', label='RNN preds', color=color2 ,markersize = 5, alpha=1)
     ax.plot(batch.cpu().numpy()[-1, :-1], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
     ax.plot(distMeans[-1], ':', label='Dist mean', color=color1)
-    ax.plot(rnn.gru.zs_block[-1,:,:].detach().cpu().numpy() *3 , label='Z', linewidth=0.5)
+    ax.plot(rnn.zs_block[-1,:,:]  , label='Z', linewidth=0.5)
     ax.set_xlabel('Trials')
     ax.set_ylabel('Rewarded position')
     ax.legend()
@@ -276,8 +284,27 @@ def test_model(exp_type):
     # torch.set_grad_enabled(True)
     return(acc.detach().cpu().numpy())
 
-rnn = RNN_out(input_size = input_dim, hidden_size=hidden_size, output_size=input_dim).to(device)
-opt = torch.optim.Adam(rnn.parameters(), lr= 0.001)
+# rnn = RNN_out(input_size = input_dim, hidden_size=hidden_size, output_size=input_dim).to(device)
+rnn = GRUModel( input_dim, hidden_size, input_dim).to(device)
+
+training_params = list()
+for name, param in rnn.named_parameters():
+    if (not name.__contains__('rnn.z')) :
+        print(name)
+        training_params.append(param)
+    else:
+        print('exluding: ', name)
+opt = torch.optim.Adam(training_params, lr= 0.001)
+
+print('___---___ z opt params')
+training_params = list()
+for name, param in rnn.named_parameters():
+    # if (name.__contains__('z')) :
+    if (name=='rnn.z') :
+        print(name)
+        training_params.append(param)
+    else:
+        print('exluding: ', name)
 optz = torch.optim.Adam(rnn.parameters(), lr= 0.001)
 
 for train_i in range(training_steps):
@@ -285,14 +312,12 @@ for train_i in range(training_steps):
     _,batch = get_batch(exp_type)
     input = batch[:, :-1, :]
     output = batch[:, 1:, :]
-
+    # with torch.autograd.set_detect_anomaly(True):
     pred, _ = rnn(input.float()) # torch.Size([100, 199, 40])
     loss = nn.functional.mse_loss(pred,output)
     opt.zero_grad()
     loss.backward()
     opt.step()
-    with torch.no_grad:
-        world = nn.functional.mse_loss(pred,output, reduction='none') # shape (batch size, time-steps, 1)
 
     if train_i % 10 == 0:
         acc = test_model(exp_type)

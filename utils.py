@@ -348,7 +348,7 @@ def get_trials_batch(envs, batch_size, config):
     for bi in range(batch_size):
         env = envs[np.random.randint(0, len(envs))] # randomly choose one env to sample from, if more than one env is given
         env.new_trial()
-        ob, gt = env.ob, env.gt
+        ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
         assert not np.any(np.isnan(ob))
         obs.append(ob), gts.append(gt)
     # Make trials of equal time length:
