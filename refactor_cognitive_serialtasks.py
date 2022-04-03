@@ -29,7 +29,8 @@ import neurogym as ngym
 from neurogym.wrappers import ScheduleEnvs
 from neurogym.utils.scheduler import RandomSchedule
 # models
-from models.PFC_gated import RNN_MD
+# from models.PFC_gated import RNN_MD
+from models.GRUB import RNN_MD
 from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
 from logger.logger import SerialLogger
@@ -92,7 +93,7 @@ if args.experiment_type == 'random_gates_no_rehearsal':
     config = Gates_no_rehearsal_config()
 if args.experiment_type == 'shrew_task': 
     config = Schizophrenia_config()
-    args.num_of_tasks = 4
+    args.num_of_tasks = len(config.tasks)
     config.train_to_criterion = True
 
 ############################################
@@ -112,8 +113,8 @@ config.gates_offset = 0.0
 config.train_gates = True
 config.save_model = True
 
-config.optimize_policy  = False
-config.optimize_td      = True
+config.optimize_policy  = True
+config.optimize_td      = False
 config.optimize_bu      = False
 
 config.higher_order = False
@@ -139,7 +140,8 @@ if config.paradigm_sequential:
         task_seq+=sub_seq # One additional final rehearsal, 
     else:
         task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
-
+    if config.paradigm_alternate:
+        task_seq = task_seq * 2
         
 elif config.paradigm_shuffle:
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
@@ -230,7 +232,7 @@ print('testing logs saved to : '+ './files/'+ config.exp_name+f'/testing_log_{co
 ## Plots
 from analysis import visualization as viz
 
-if config.higher_order and not config.optimize_policy:
-    viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
-
 viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
+
+# if config.higher_order and not config.optimize_policy:
+viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)

@@ -208,7 +208,7 @@ class Schizophrenia_config(object):
         # self.tasks = ngym.get_collection('yang19')
         # This is the golden sequence, hand tuned curriculum to finish in the least no of trials
         self._tasks= [
-                    'shrew_task_either', 'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
+                    'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
                     ] 
         # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
@@ -236,7 +236,7 @@ class Schizophrenia_config(object):
         self.batch_size = 100
 
         #  training paradigm
-        self.max_trials_per_task = 40000
+        self.max_trials_per_task = 80000
         self.use_multiplicative_gates = True 
         self.use_additive_gates = False 
         self.train_to_criterion = True
@@ -249,7 +249,7 @@ class Schizophrenia_config(object):
         self.no_shuffled_trials = 40000
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
-        
+        self.paradigm_alternate =True
 
         # RNN model
         self.input_size = 6

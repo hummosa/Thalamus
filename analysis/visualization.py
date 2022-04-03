@@ -89,6 +89,7 @@ def plot_accuracies( config, training_log, testing_log):
 def plot_credit_assignment_inference( config, training_log, testing_log):
     if (config.optimize_bu): context_ids = training_log.bu_context_ids
     if (config.optimize_td): context_ids =  training_log.td_context_ids
+    if (config.optimize_policy): context_ids =  training_log.md_context_ids
 
     
     mg = np.stack(training_log.md_grads)
@@ -97,25 +98,28 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
     mg_repeated.shape # xxx, 45
 
     x0, x1 = 0, min(training_log.stamps[-1], 1000)
-    fig, axes = plt.subplots(3,1, figsize=[12,6])
+    fig, axes = plt.subplots(4,1, figsize=[12,6])
     ax = axes[0]
     ax.matshow(mg_repeated[x0:x1].T)
     ax.set_xlim([x0, x1])
+    ax.set_ylabel('md grads')
     # plt.colorbar(ax)
 
     ax = axes[1]
     tdci = np.stack(context_ids)
     mtd = tdci.mean(1) # (7729, 15)
-    ax.matshow(np.repeat(mtd[x0:x1], repeats=10, axis=1).T)
+    im = ax.matshow(np.repeat(mtd[x0:x1], repeats=10, axis=1).T)
     ax.set_xlim([x0, x1])
+    ax.set_ylabel('md activity')
+    # ax.colorbar()
+    plt.colorbar(im) #, ax=ax.ravel().tolist())
 
-    ax = axes[1]
     no_of_values = len(config.tasks)-5
     norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
     cmap_obj = mpl.cm.get_cmap('Set1') # tab20b tab20
     cmap = mpl.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
 
-    switches=  training_log.switch_trialxxbatch 
+    switches=  training_log.switch_trialxxbatch[1:] # earlier on I must have added zero as a switch trial 
     ax.set_xlim([x0, x1])
 
     # ax.set_ylim([0,1])
@@ -124,7 +128,17 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
         ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.9)
 
     ax = axes[2]
-    ax.matshow(np.clip(mg_repeated[x0:x1].T, max= mg_repeated.max()/2))
+    sample_rate = 1
+    ax = sns.heatmap(mg[::sample_rate].T, cmap='Reds', ax = ax)
+    # ax.set_yticklabels([str(i) for i in labels])
+    ax.set_ylabel('MD neuron idx', fontsize=8)
+    # ax.set_xticks(list(range(0, int(mg.shape[0]/sample_rate), int(20000/sample_rate))))
+    # ax.set_xticklabels([str(int(l/1000)) for l in list(range(0, mg.shape[0], 20000))])
+    # _=ax.set_xlabel('Trial (1000)', fontsize=8)
+    ax.set_title('MD grads')
+
+    ax = axes[3]
+    ax.matshow(np.clip(mg_repeated[x0:x1].T, a_min = None, a_max= mg_repeated.max()/2))
     ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
     for ri in range(len(switches)):
         ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
@@ -132,7 +146,7 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
     # for ri in range(len(training_log.switch_trialxxbatch)-1):
     #     ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
 
-    plt.savefig('./files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_{training_log.stamps[-1]}_{3.3:1.2f}.jpg', dpi=300)
+    plt.savefig('./files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_{training_log.stamps[-1]}_{3.3:1.2f}.jpg', dpi=200)
 
 
 def get_activity(config, net, env, num_trial=1000):

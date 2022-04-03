@@ -35,13 +35,16 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             }
             param= params[task_name]
             envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
-        elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either']:
+        elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either',  'shrew_task_either2']:
             if task_name == 'shrew_task_audition':
                 envs[task_id] = Shrew_task(dt =10, attend_to='audition')
             if task_name == 'shrew_task_vision':
                 envs[task_id] = Shrew_task(dt =10, attend_to='vision')
-            else:
-                envs[task_id] = Shrew_task(dt =10, attend_to='either')
+               
+            if task_name == 'shrew_task_either':
+                envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=9)
+            if task_name == 'shrew_task_either2':
+                envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=9)
 
         else: # assume a neurogym yang19 task:
             envs[task_id] = gym.make(task_name, **config.env_kwargs)
@@ -65,8 +68,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
     
-            outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
-                
+            # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
+            outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
@@ -83,6 +86,10 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # plt.close('all')
             # save loss
 
+            if type(rnn_activity) is tuple:
+                rnn_activity, md = rnn_activity
+                training_log.md_context_ids.append(md.detach().cpu().numpy())
+                training_log.md_grads.append(md.grad.cpu().numpy())
             training_log.write_basic(step_i, loss.item(), acc, task_id)
             training_log.gradients.append(np.array([torch.norm(p.grad).item() for p in net.parameters() if p.grad is not None]) )
             fidx = min(i, 100)
@@ -104,24 +111,23 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
                 ################################ test during training
                 net.eval()
-                # torch.set_grad_enabled(True)
-                with torch.no_grad():
-                    testing_log.stamps.append(step_i)
-                    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-                    # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
-
-                    fix_perf, act_perf = get_performance(
-                        net,
-                        envs,
-                        context_ids=testing_context_ids,
-                        config = config,
-                        batch_size = config.test_num_trials,
-                        ) 
-                    
-                    testing_log.accuracies.append(act_perf)
-                    testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
-                            
                 # torch.set_grad_enabled(False)
+                testing_log.stamps.append(step_i)
+                testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
+                # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
+
+                fix_perf, act_perf = get_performance(
+                    net,
+                    envs,
+                    context_ids=testing_context_ids,
+                    config = config,
+                    batch_size = config.test_num_trials,
+                    ) 
+                
+                testing_log.accuracies.append(act_perf)
+                testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
+                            
+                # torch.set_grad_enabled(True)
                 net.train()
  
                 #### End testing
