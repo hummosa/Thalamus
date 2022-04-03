@@ -273,7 +273,7 @@ class Schizophrenia_config(object):
 
     
     ############################################
-        self.save_trained_model = True
+        self.save_trained_model = False
         self.save_model = False
         self.load_saved_rnn1 = False 
         self.load_trained_cog_obs = False

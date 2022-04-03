@@ -153,15 +153,17 @@ class CTRNN_MD(nn.Module):
         md.retain_grad()
         
         output = torch.stack(output, dim=0)
-        rnn_activity = torch.stack(rnn_activity, dim=0)
+        # rnn_activity = torch.stack(rnn_activity, dim=0)
         if gt is not None:
-            model_loss = self.loss_func(output, gt)
-            if (model_loss - self.mean_loss) > 0.3 * (self.mean_loss):
+            model_loss = self.loss_func(output, gt, use_loss='nll')
+            self.mean_loss = self.loss_momentum * self.mean_loss + (1-self.loss_momentum) * model_loss.sum()
+            
+            if (model_loss - self.mean_loss) > 0.5 * (self.mean_loss):
                 # deliberate until loss is down or 200 trials.
                 deliberate_i = 0
-                while ((model_loss - self.mean_loss) > 0.1 * (self.mean_loss) and (deliberate_i < 30)):
+                while ((model_loss - self.mean_loss) > 0.2 * (self.mean_loss) and (deliberate_i < 30)):
                     # model_loss.backward() # run through to just clear the grad graph already constructed.
-                    self.h2h.zero_grad(); self.h2md.zero_grad()
+                    self.h2h.zero_grad(); self.h2md.zero_grad(); self.mul_gates.grad = None
                     md = md.detach() # remove connecion to the previous graph.
                     md.requires_grad = True
                     outputs = []
@@ -170,16 +172,17 @@ class CTRNN_MD(nn.Module):
                         outputs.append(output_temp)
                     outputs = torch.stack(outputs, dim=0)
                     model_loss = self.loss_func(outputs, gt)
-                    md_grad = torch.autograd.grad(outputs= model_loss, inputs=md, 
+                    acc_loss = nn.functional.nll_loss(torch.log_softmax(outputs[-1,...], dim = -1, dtype=torch.float), torch.argmax(gt[-1,...], dim=-1))
+                    # acc_loss.backward()
+                    md_grad = torch.autograd.grad(outputs= acc_loss, inputs=md, 
                             only_inputs=True, create_graph=False, retain_graph=False)[0]
                     # stats(md_grad, 'md_grad')
-                    print(f'md: {md.mean(0).detach().cpu().numpy()}, \t md_grads: {md_grad.mean(0).detach().cpu().numpy()}  \t loss: {model_loss}\t outputs {outputs[-1,0,:].detach().cpu().numpy()}')
+                    print(f'md: {md.mean(0).detach().cpu().numpy()}, \t md_grads: {md_grad.mean(0).detach().cpu().numpy()}  \t loss: {acc_loss}\t outputs {outputs[-1,0,:].detach().cpu().numpy()}')
                     md = (md - 1e2* md_grad.detach().mean(0)) 
+                    self.mean_loss = self.loss_momentum * self.mean_loss + (1-self.loss_momentum) * model_loss.sum()
 
                     deliberate_i +=1
 
-            self.mean_loss = self.loss_momentum * self.mean_loss + (1-self.loss_momentum) * model_loss.sum()
-            del output
             output, hidden, md = self.forward(input, task_id, md = md.detach(), update_md = False) # rerun the normal forward to build the graph again for the normal loss learning. 
 
         if update_md:
@@ -187,9 +190,14 @@ class CTRNN_MD(nn.Module):
 
         return (output, hidden, md)
     
-    def loss_func(self, output, gt):
-        model_loss = nn.functional.mse_loss(output, gt)
-        return (model_loss)
+    def loss_func(self, output, labels, use_loss='nll'):    # criterion & optimizer
+        if use_loss =='mse':
+            crit = nn.MSELoss()
+            loss = crit(output, labels)
+        elif use_loss =='nll':
+            crit = F.nll_loss
+            loss = crit(torch.log_softmax(output[-1,...], dim = -1, dtype=torch.float), torch.argmax(labels[-1,...], dim=-1))
+        return loss
 
 class RNN_MD(nn.Module):
     """Recurrent network model. A GRU with an MD-like bottleneck gating.

@@ -10,13 +10,23 @@ import matplotlib.pyplot as plt
 from utils import stats, get_trials_batch, get_performance, accuracy_metric
 from Schizophrenia.tasks_coded_in_neurogym import NoiseyMean, Shrew_task
 
+def criterion(output, labels, use_loss='nll'):    # criterion & optimizer
+    if use_loss =='mse':
+        crit = nn.MSELoss()
+        loss = crit(output, labels)
+    elif use_loss =='nll':
+        crit = F.nll_loss
+        
+        loss = crit(torch.log_softmax(output[-1,...], dim = -1, dtype=torch.float), torch.argmax(labels[-1,...], dim=-1))
+    return loss
+
+
 def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
-    # criterion & optimizer
-    criterion = nn.MSELoss()
     print('training parameters:')
     training_params = list()
     for name, param in net.named_parameters():
         if (not name.__contains__('md_context_id')) and (not ('gates' in name) or config.train_gates):
+        # if (not ('gates' in name) or config.train_gates):
             print(name)
             training_params.append(param)
         else:
@@ -67,7 +77,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         for i in training_bar:
             context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-    
+            inputs.refine_names('timestep', 'batch', 'input_dim')
+            labels.refine_names('timestep', 'batch', 'output_dim')
             # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
@@ -75,7 +86,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
             
-            loss = criterion(outputs, labels)
+            loss = criterion(outputs, labels, use_loss='nll')
             loss.backward()
            
             optimizer.step()
