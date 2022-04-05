@@ -94,13 +94,14 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
     
     mg = np.stack(training_log.md_grads)
     mg = mg.mean(1) #(7957, 15)
-    mg_repeated = np.repeat(mg, repeats =10, axis=1)
-    mg_repeated.shape # xxx, 45
 
-    x0, x1 = 0, min(training_log.stamps[-1], 1000)
+    x0, x1 = 0, training_log.stamps[-1]
     fig, axes = plt.subplots(4,1, figsize=[12,6])
+    
     ax = axes[0]
-    ax.matshow(mg_repeated[x0:x1].T)
+    ax = sns.heatmap(mg.T, cmap='Reds', ax = ax)
+    ax.set_xticks(list(range(0, x1, 200)))
+    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
     ax.set_xlim([x0, x1])
     ax.set_ylabel('md grads')
     # plt.colorbar(ax)
@@ -108,13 +109,15 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
     ax = axes[1]
     tdci = np.stack(context_ids)
     mtd = tdci.mean(1) # (7729, 15)
-    im = ax.matshow(np.repeat(mtd[x0:x1], repeats=10, axis=1).T)
+    im = sns.heatmap(mtd.T, ax = ax)
+    ax.set_xticks(list(range(0, x1, 200)))
+    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
     ax.set_xlim([x0, x1])
     ax.set_ylabel('md activity')
     # ax.colorbar()
-    plt.colorbar(im) #, ax=ax.ravel().tolist())
+    # plt.colorbar(im) #, ax=ax.ravel().tolist())
 
-    no_of_values = len(config.tasks)-5
+    no_of_values = len(config.tasks)
     norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
     cmap_obj = mpl.cm.get_cmap('Set1') # tab20b tab20
     cmap = mpl.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
@@ -129,20 +132,21 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
 
     ax = axes[2]
     sample_rate = 1
-    ax = sns.heatmap(mg[::sample_rate].T, cmap='Reds', ax = ax)
+    hm = sns.heatmap(mg.T, cmap='Reds', ax = ax)
     # ax.set_yticklabels([str(i) for i in labels])
     ax.set_ylabel('MD neuron idx', fontsize=8)
-    # ax.set_xticks(list(range(0, int(mg.shape[0]/sample_rate), int(20000/sample_rate))))
-    # ax.set_xticklabels([str(int(l/1000)) for l in list(range(0, mg.shape[0], 20000))])
+    ax.set_xticks(list(range(0, x1, 200)))
+    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
     # _=ax.set_xlabel('Trial (1000)', fontsize=8)
     ax.set_title('MD grads')
 
     ax = axes[3]
-    ax.matshow(np.clip(mg_repeated[x0:x1].T, a_min = None, a_max= mg_repeated.max()/2))
+    # ax.matshow(np.clip(mg_repeated[x0:x1].T, a_min = None, a_max= mg_repeated.max()/2))
+    # hm = sns.heatmap(mg[::sample_rate].T, cmap='Reds', ax = ax)
     ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
     for ri in range(len(switches)):
         ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
-    ax.set_xlim([x0, x1])
+    # ax.set_xlim([x0, x1])
     # for ri in range(len(training_log.switch_trialxxbatch)-1):
     #     ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
 

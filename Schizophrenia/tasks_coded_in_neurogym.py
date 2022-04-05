@@ -122,10 +122,9 @@ class Shrew_task(TrialEnv):
         self.add_period(periods)
         
         if self.attend_to == 'either':
-            modality = np.choose(1, ['audition', 'vision'])
+            modality = rng.choice(['audition', 'vision'])
         else:
             modality = self.attend_to
-            
         # Sample observation for the next trial
         cues = np.zeros(shape=(self.total_cues) ) 
         if self.no_of_coherent_cues is None:
@@ -159,12 +158,22 @@ class Shrew_task(TrialEnv):
         self.add_ob(cues, period='cues', where='cues')
         
         # Set ground_truth
-        audition = 1.* (modality == 'audition') if (self.context == 1) else (1.*(modality=='vision')) # If context 2 flip the ground truth to the other context. 
+        audition = 1.* (modality == 'audition') 
+        if (self.context == 2):
+            audition = 1.- audition  # If context 2 flip the ground truth to the other context. 
+
         # groundtruth = np.concatenate([np.array(audition).reshape([1]), stimulus[:2].T if audition else stimulus[2:].T, ]) # choice is to report type of trial (audition (1) or not (0), and then the right choice of stimulus side  )
-        groundtruth = np.concatenate([np.array(audition).reshape([1]), stimulus[:2].T if modality else stimulus[2:].T, ]) # choice is to report type of trial (audition (1) or not (0), and then the right choice of stimulus side  )
+        groundtruth = np.zeros(4)
+        if audition:
+            groundtruth[:2] = stimulus[:2].T 
+        else:
+            groundtruth[2:] = stimulus[2:].T# choice is to report type of trial (audition (1) or not (0), and then the right choice of stimulus side  )
+        # groundtruth = np.concatenate([np.array(audition).reshape([1]), stimulus[:2].T if audition else stimulus[2:].T, ]) # choice is to report type of trial (audition (1) or not (0), and then the right choice of stimulus side  )
         # set up ground truth vector as [audition (1), left, right]
-        gt_index = [ np.all(row == groundtruth) for row in [[0., 1., 0.], [0., 0., 1.], [1., 1., 0.], [1., 0., 1.]] ] #Turining this off because passing gt as index is the norm for neurogym.
-        self.set_groundtruth(np.argwhere(gt_index).squeeze(), period='decision', where='choice')  
+        # gt_index = [ np.all(row == groundtruth) for row in [[0., 1., 0.], [0., 0., 1.], [1., 1., 0.], [1., 0., 1.]] ] #Turining this off because passing gt as index is the norm for neurogym.
+        # gt_index =   np.argmax(groundtruth) #Turining this off because passing gt as index is the norm for neurogym.
+        # self.set_groundtruth(np.argwhere(gt_index).squeeze(), period='decision', where='choice')  
+        self.set_groundtruth( np.argmax(groundtruth), period='decision', where='choice')  
         # see note above. Self.action_space.shape still returns () which does not allow adding 3 dim for ground truth.
 
         trial = dict()
@@ -185,11 +194,17 @@ class Shrew_task(TrialEnv):
         # By default, the trial is not ended
         info = {'new_trial': False}
         return self.ob_now, reward, done, info
+test = True
+test = False
+if test:
 
-# env = Shrew_task(attend_to='either', no_of_coherent_cues=8)
-# t = env.new_trial()
-# ob_size = env.observation_space.shape[0]
-# act_size = env.action_space.n
-# print('ob_size :', ob_size, '   act_size: ', act_size)
-# print(env.ob)
-# print(env.gt)
+    env = Shrew_task(attend_to='either', context=1,  no_of_coherent_cues=9)
+    t = env.new_trial()
+    ob_size = env.observation_space.shape[0]
+    act_size = env.action_space.n
+    print('ob_size :', ob_size, '   act_size: ', act_size)
+    print(env.ob)
+    print(env.gt)
+    for i in range(20):
+        t = env.new_trial()
+        print(env.gt)

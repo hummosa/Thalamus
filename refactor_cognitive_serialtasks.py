@@ -29,8 +29,8 @@ import neurogym as ngym
 from neurogym.wrappers import ScheduleEnvs
 from neurogym.utils.scheduler import RandomSchedule
 # models
-# from models.PFC_gated import RNN_MD
-from models.GRUB import RNN_MD
+from models.PFC_gated import RNN_MD
+# from models.GRUB import RNN_MD
 from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
 from logger.logger import SerialLogger
@@ -51,8 +51,10 @@ import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
 my_parser.add_argument('exp_name',  default='temp', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-# my_parser.add_argument('--experiment_type', default='random_gates_both', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
+# my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
@@ -91,10 +93,9 @@ if args.experiment_type == 'shuffle_add':
     config = Shuffle_add_config()
 if args.experiment_type == 'random_gates_no_rehearsal': 
     config = Gates_no_rehearsal_config()
-if args.experiment_type == 'shrew_task': 
-    config = Schizophrenia_config()
+if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean': 
+    config = Schizophrenia_config(args.experiment_type)
     args.num_of_tasks = len(config.tasks)
-    config.train_to_criterion = True
 
 ############################################
 config.set_strings( exp_name)
@@ -113,15 +114,14 @@ config.gates_offset = 0.0
 config.train_gates = True
 config.save_model = True
 
-config.optimize_policy  = True
+config.optimize_policy  = False
 config.optimize_td      = False
-config.optimize_bu      = False
+config.optimize_bu      = True
 
-config.higher_order = False
+config.higher_order = True
 if config.higher_order:
     config.gates_divider = 1.2
     config.random_rehearsals = 20 if config.paradigm_sequential else 4000
-    config.save_model = True
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
@@ -234,5 +234,5 @@ from analysis import visualization as viz
 
 viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
 
-# if config.higher_order and not config.optimize_policy:
-viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+if config.higher_order and not config.optimize_policy:
+    viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)

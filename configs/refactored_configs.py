@@ -78,7 +78,7 @@ class BaseConfig(object):
         self.no_shuffled_trials = 40000
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
-        
+        self.paradigm_alternate = False
 
         # RNN model
         self.input_size = 33
@@ -196,7 +196,7 @@ class SerialConfig(BaseConfig):
         self.use_additive_gates = False 
         
 class Schizophrenia_config(object):
-    def __init__(self, args= []):
+    def __init__(self, exp_type, args= []):
         # system
         self.device = 'cuda'
         self.ROOT_DIR = os.getcwd()
@@ -207,9 +207,14 @@ class Schizophrenia_config(object):
         import neurogym as ngym
         # self.tasks = ngym.get_collection('yang19')
         # This is the golden sequence, hand tuned curriculum to finish in the least no of trials
-        self._tasks= [
+        exp_type = 'noisy_mean'
+        if exp_type == 'shrew_task':
+            self._tasks= [
                     'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
                     ] 
+        elif exp_type == 'noisy_mean':
+            self._tasks= ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']
+
         # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
         self.tasks = self._tasks
@@ -252,9 +257,14 @@ class Schizophrenia_config(object):
         self.paradigm_alternate =True
 
         # RNN model
-        self.input_size = 6
-        self.hidden_size = 64
-        self.output_size = 4
+        if exp_type == 'shrew_task':
+            self.input_size = 6
+            self.hidden_size = 64
+            self.output_size = 4
+        elif exp_type == 'noisy_mean':
+            self.input_size = 1
+            self.hidden_size = 64
+            self.output_size = 1
         self.tau= 200
         self.lr = 1e-3
 

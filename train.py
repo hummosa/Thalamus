@@ -79,18 +79,18 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
             labels.refine_names('timestep', 'batch', 'output_dim')
-            # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
-            outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
+            outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
+            # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
             
-            loss = criterion(outputs, labels, use_loss='nll')
+            loss = criterion(outputs, labels, use_loss='mse')
             loss.backward()
            
             optimizer.step()
-
+            
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
             # plt.savefig('example_inpujt_label_output.jpg')
@@ -233,7 +233,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                     # outs = torch.tensor(training_outputs, device=config.device)
                     #################################################
                     cpred, _, = cog_net(ins)
-                    td_context_id  = F.softmax(cpred[-1], dim = 1) # will give 15 one_hot.
+                    td_context_id  = F.gumbel_softmax(cpred[-1], dim = 1) # will give 15 one_hot.
                 else:
                     td_context_id = torch.ones([config.batch_size,config.md_size])/config.md_size    
                     # td_context_id = td_context_id.repeat([config.batch_size, 1])
@@ -255,7 +255,11 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 policy_context_id = torch.ones([1,config.md_size])/config.md_size    
                 policy_context_id = policy_context_id.repeat([config.batch_size, 1])
 
-            inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            if config.optimize_td or config.optimize_bu:
+                if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
+                    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            else:
+                inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             
             # combine context signals.
             if config.optimize_policy: context_id = policy_context_id 
@@ -286,7 +290,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             if not context_id.grad is None: # if not using gates at all, grad will be none
                 training_log.md_grads.append(context_id.grad.data.cpu().numpy())
             else: 
-                assert(not (config.use_multiplicative_gates or config.use_additive_gates), 'context_ID grad is None')
+                assert (not (config.use_multiplicative_gates or config.use_additive_gates) ), 'context_ID grad is None'
                 
 
             if False: # handGD
