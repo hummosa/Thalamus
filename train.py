@@ -9,6 +9,7 @@ import neurogym as ngym
 import matplotlib.pyplot as plt
 from utils import stats, get_trials_batch, get_performance, accuracy_metric
 from Schizophrenia.tasks_coded_in_neurogym import NoiseyMean, Shrew_task
+import utils
 
 def criterion(output, labels, use_loss='nll'):    # criterion & optimizer
     if use_loss =='mse':
@@ -36,28 +37,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
-        if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']:
-            params = {
-                'noisy_mean':       [0.05, 0, 0 , 0], 
-                'drifting_mean':    [0.05, 0.05, 0 , 0],
-                'oddball':          [0.05,  0.05, 0.1, 0],
-                'changepoint':      [0.05, 0.0, 0.0 , 0.1]
-            }
-            param= params[task_name]
-            envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
-        elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either',  'shrew_task_either2']:
-            if task_name == 'shrew_task_audition':
-                envs[task_id] = Shrew_task(dt =10, attend_to='audition')
-            if task_name == 'shrew_task_vision':
-                envs[task_id] = Shrew_task(dt =10, attend_to='vision')
-               
-            if task_name == 'shrew_task_either':
-                envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=9)
-            if task_name == 'shrew_task_either2':
-                envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=9)
-
-        else: # assume a neurogym yang19 task:
-            envs[task_id] = gym.make(task_name, **config.env_kwargs)
+        build_env(config, envs, task_id, task_name)
 
     task_i = 0
     bar_tasks = tqdm(task_seq)
@@ -165,6 +145,30 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
 
     return(testing_log, training_log, net)
 
+def build_env(config, envs, task_id, task_name):
+    if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']:
+        params = {
+                'noisy_mean':       [0.05, 0, 0 , 0], 
+                'drifting_mean':    [0.05, 0.05, 0 , 0],
+                'oddball':          [0.05,  0.05, 0.1, 0],
+                'changepoint':      [0.05, 0.0, 0.0 , 0.1]
+            }
+        param= params[task_name]
+        envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
+    elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either',  'shrew_task_either2']:
+        if task_name == 'shrew_task_audition':
+            envs[task_id] = Shrew_task(dt =10, attend_to='audition')
+        if task_name == 'shrew_task_vision':
+            envs[task_id] = Shrew_task(dt =10, attend_to='vision')
+               
+        if task_name == 'shrew_task_either':
+            envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=9)
+        if task_name == 'shrew_task_either2':
+            envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=9)
+
+    else: # assume a neurogym yang19 task:
+        envs[task_id] = gym.make(task_name, **config.env_kwargs)
+
 def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  = 0):
 
     md_context_id = torch.zeros([1, config.md_size])
@@ -195,7 +199,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
-        envs[task_id] = gym.make(task_name, **config.env_kwargs)
+        build_env(config, envs, task_id, task_name)
+
 
     # initialize buffer
     config.horizon =50
@@ -272,6 +277,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             
             outputs, rnn_activity = net(inputs, sub_id=context_id)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
+            utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, filename=None, net=net )
+
             buffer_acts.append(rnn_activity.detach().cpu().numpy().mean(0))
             buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
             buffer_accuracies.append(acc)
@@ -337,7 +344,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                         config = config,
                         batch_size = config.test_num_trials,
                         ) 
-                    
+
                     testing_log.accuracies.append(act_perf)
                     testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
                 # torch.set_grad_enabled(False)
@@ -355,196 +362,13 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             step_i+=1
             running_acc = 0.7 * running_acc + 0.3 * acc
         task_i +=1
+
     training_log.optimizing_total_batches, testing_log.optimizing_total_batches = step_i, step_i
 
     return(testing_log, training_log, net)
 
-def test(config, net, cog_net, task_seq, testing_log,  training_log,step_i  = 0):
 
-    md_context_id = torch.zeros([1, config.md_size])
 
-    # criterion & optimizer
-    criterion = nn.MSELoss()
-    print('Policy training parameters:')
-    training_params = list()
-    for name, param in net.named_parameters():
-        if (not name.__contains__('md_context_id')) and (not ('gates' in name) or config.train_gates):
-            print(name)
-            training_params.append(param)
-        else:
-            print('exluding: ', name)
-    policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
-
-    bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-    lr=config.lr*100)
-    
-    td_training_params = list()
-    print('cognitive network optimized parameters')
-    for name, param in cog_net.named_parameters():
-        print(name)
-        td_training_params.append(param)
-        
-    td_optimizer = torch.optim.Adam(td_training_params, lr=config.lr*(100 if cog_net.gru.hidden_size ==1 else 1))
-
-    # Make all tasks, but reorder them from the tasks_id_name list of tuples
-    envs = [None] * len(config.tasks_id_name)
-    for task_id, task_name in config.tasks_id_name:
-        envs[task_id] = gym.make(task_name, **config.env_kwargs)
-
-    # initialize buffer
-    config.horizon =50
-    buffer_acts = []
-    buffer_task_ids = []
-    buffer_labels = []
-    buffer_accuracies = []
-
-    task_i = 0
-    bar_tasks = tqdm(task_seq)
-    for (task_id, task_name) in bar_tasks:
-
-        env = envs[task_id]
-        bar_tasks.set_description('i: ' + str(step_i))
-        training_log.switch_trialxxbatch.append(step_i)
-        training_log.switch_task_id.append(task_id)
-        training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
-        
-        running_frustration = 0
-        running_acc = 0
-        training_bar = trange(config.max_trials_per_task//config.batch_size)
-        for i in training_bar:
-
-            if config.optimize_td:
-                #########Gather cognitive inputs ###############
-                if len(buffer_acts) > config.horizon-1:
-                    # expanded_previous_acc = np.repeat(np.array(buffer_accuracies)[..., np.newaxis], 10, axis=-1)   #Expanded merely to emphasize their signal over the numerous acts
-                    expanded_previous_acc = np.array(buffer_accuracies).reshape([-1, 1, 1]).repeat(config.batch_size, 1).repeat(10, 2) # expand batch dim, but alos repeat to emphsaize them
-                    gathered_inputs = np.concatenate([buffer_acts, buffer_labels, expanded_previous_acc], axis=-1) #shape  7100 100 266
-                    # task_ids_repeated = buffer_task_ids[..., np.newaxis].repeat(100,1)
-                    
-                    training_inputs = gathered_inputs
-                    # training_outputs= task_ids_repeated
-                    ins =  torch.tensor(training_inputs, device=config.device) # (input_length, 100, 266)
-                    # outs = torch.tensor(training_outputs, device=config.device)
-                    #################################################
-                    cpred, _, = cog_net(ins)
-                    td_context_id  = F.softmax(cpred[-1], dim = 1) # will give 15 one_hot.
-                else:
-                    td_context_id = torch.ones([config.batch_size,config.md_size])/config.md_size    
-                    # td_context_id = td_context_id.repeat([config.batch_size, 1])
-                training_log.td_context_ids.append(td_context_id.detach().cpu().numpy())
-
-            if config.optimize_bu:
-                # context_id = torch.zeros([config.batch_size, config.md_size])
-                # context_id[:, torch.argmax(md_context_id, axis=1)] = 1. # Hard max
-                
-                bu_context_id = net.rnn.md_context_id    
-                bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) 
-                bu_context_id = bu_context_id.repeat([config.batch_size, 1])
-                bu_context_id = bu_context_id.to(config.device)
-                bu_context_id.requires_grad_()
-                training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
-                
-            if config.optimize_policy:
-                # create non-informative uniform context_ID
-                policy_context_id = torch.ones([1,config.md_size])/config.md_size    
-                policy_context_id = policy_context_id.repeat([config.batch_size, 1])
-
-            inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-            
-            # combine context signals.
-            if config.optimize_policy: context_id = policy_context_id 
-            if (config.optimize_bu): context_id = bu_context_id
-            if (config.optimize_td): context_id =  td_context_id 
-            context_id.requires_grad_().retain_grad() #shape batch_size x Md_size
-            # print(context_id[0,:])
-            # context_id = config.optimize_bu * bu_context_id +\
-            #     config.optimize_td * td_context_id + config.optimize_policy * policy_context_id 
-            
-            outputs, rnn_activity = net(inputs, sub_id=context_id)
-            acc  = accuracy_metric(outputs.detach(), labels.detach())
-            buffer_acts.append(rnn_activity.detach().cpu().numpy().mean(0))
-            buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
-            buffer_accuracies.append(acc)
-            buffer_task_ids.append(task_id)
-            if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0) 
-            # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
-            #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
-            if config.optimize_bu: bu_optimizer.zero_grad()
-            if config.optimize_td: td_optimizer.zero_grad()
-            if config.optimize_policy: policy_optimizer.zero_grad()
-            
-            loss = criterion(outputs, labels)
-            loss.backward()
-            # if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                # plot_context_id(config, td_context_id, bu_context_id, task_id)
-
-            training_log.md_grads.append(context_id.grad.data.cpu().numpy())
-
-            if False: # handGD
-                    caia_lr = 0.001
-                    # grad_sum = context_id.grad.data.sum(0)
-                    grad_sum = context_id.grad.data.sum(0)
-                    md_context_id = md_context_id.to(config.device) - caia_lr* grad_sum# md_grads=(context_id.grad.data.cpu().numpy()) # shape [batch_size, 15]
-                    # md_context_id = F.one_hot(torch.argmax(md_context_id, dim=1), md_context_id.shape[1])
-            if config.optimize_bu:      bu_optimizer.step()
-            if config.optimize_td:      td_optimizer.step()
-            if config.optimize_policy:  policy_optimizer.step()
-
-            # from utils import show_input_output
-            # show_input_output(inputs, labels, outputs)
-            # plt.savefig('example_inpujt_label_output.jpg')
-            # plt.close('all')
-            # save loss
-
-            training_log.write_basic(step_i, loss.item(), acc, task_id)
-            training_log.gradients.append(np.array([torch.norm(p.grad).item() for p in net.parameters() if p.grad is not None]) )
-            if config.save_detailed or config.use_cognitive_observer:
-                training_log.write_detailed( rnn_activity= rnn_activity.detach().cpu().numpy().mean(0),
-                inputs=   [] ,# inputs.detach().cpu().numpy(),
-                outputs = outputs.detach().cpu().numpy()[-1, :, :],
-                labels =   labels.detach().cpu().numpy()[-1, :, :],
-                sampled_act = [], # rnn_activity.detach().cpu().numpy()[:,:, 1:356:36], # Sample about 10 neurons 
-                # rnn_activity.shape             torch.Size([15, 100, 356])
-                )
-            training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
-            # print statistics
-            if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                ################################ test during training
-                net.eval()
-                # torch.set_grad_enabled(True)
-                with torch.no_grad():
-                    testing_log.stamps.append(step_i)
-                    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-                    # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
-
-                    fix_perf, act_perf = get_performance(
-                        net,
-                        envs,
-                        context_ids=testing_context_ids,
-                        config = config,
-                        batch_size = config.test_num_trials,
-                        ) 
-                    
-                    testing_log.accuracies.append(act_perf)
-                    testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
-                # torch.set_grad_enabled(False)
-                net.train()
- 
-                #### End testing
-            training_log.trials_to_crit[-1] += 1 # increment the total trials spent on this current task
-            # relax a little! Only optimizing context signal!
-            criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
-            criterion_accuaracy -=0.1
-            if ((running_acc > criterion_accuaracy) and config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
-            # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
-                running_acc = 0.
-                break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
-            step_i+=1
-            running_acc = 0.7 * running_acc + 0.3 * acc
-        task_i +=1
-    training_log.optimizing_total_batches, testing_log.optimizing_total_batches = step_i, step_i
-
-    return(testing_log, training_log, net)
 
 
 def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):

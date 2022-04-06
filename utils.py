@@ -322,8 +322,9 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
         fixation_accuracy = ((gt==0)==(ap==0)).sum() / np.prod(gt.shape)## get fixation performance. overlap between when gt is to fixate and when model is fixating
            ## then divide by number of time steps.
         fixation_accuracies[context_id] = fixation_accuracy.detach().cpu().numpy()
-        action_accuracy = (gt[-1,:] == ap[ -1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
-        action_accuracies[context_id] = action_accuracy.detach().cpu().numpy()
+
+        action_accuracy = accuracy_metric(action_pred, labels)
+        action_accuracies[context_id] = action_accuracy
 #         import pdb; pdb.set_trace()
     return((fixation_accuracies, action_accuracies))
 
@@ -332,25 +333,49 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
 def accuracy_metric(outputs, labels):
     ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     gt = torch.argmax(labels, -1)
-    action_accuracy = (gt[-1, :] == ap[-1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
-#     import pdb; pdb.set_trace()
+    if labels.shape[-1] > 1: # checking it is not the Nassar tasks
+        action_accuracy = (gt[-1,:] == ap[ -1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
+    else: # IF NASSAR tasks
+        action_accuracy = ((abs(outputs - labels ) < 0.1).float()).mean()
     return(action_accuracy.detach().cpu().numpy())
+
+def plot_Nassar_task(env, config, context_id, filename, net):
+    # ap = torch.argmax(outputs, -1) # shape ap [500, 10]
+    # gt = torch.argmax(labels, -1)
+    input, output, distMeans = get_trials_batch(env, 2, config,return_dist_mean_for_Nassar_tasks=True)
+    pred, _ = net(input, sub_id=context_id)
+    plt.close('all')
+    fig, ax = plt.subplots(1,1)
+    # ax = axes.flatten()[0]
+    color1 = 'tab:blue'
+    color2 = 'tab:red'
+    ax.plot(pred.detach().cpu().numpy()[-1,  ], '.', label='RNN preds', color=color2 ,markersize = 5, alpha=1)
+    ax.plot(input.cpu().numpy()[-1, :-1], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
+    ax.plot(distMeans[-1], ':', label='Dist mean', color=color1)
+    # ax.plot(rnn.zs_block[-1,:,:]  , label='Z', linewidth=0.5)
+    ax.set_xlabel('Trials')
+    ax.set_ylabel('Rewarded position')
+    ax.legend()
+    # ax.set_title('Oddball condition' if exp_type == 'Oddball' else 'Change-point condition')
+    plt.savefig(f'./current_results_.jpg', dpi=200)
+
+
 
 # In[6]:
 
-def get_trials_batch(envs, batch_size, config):
+def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks=False):
     # check if only one env or several and ensure it is a list either way.
     if type(envs) is not type([]):
         envs = [envs]
         
     # fetch and batch data
-    obs, gts = [], []
+    obs, gts, dts = [], [], []
     for bi in range(batch_size):
         env = envs[np.random.randint(0, len(envs))] # randomly choose one env to sample from, if more than one env is given
-        env.new_trial()
+        trial= env.new_trial()
         ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
         assert not np.any(np.isnan(ob))
-        obs.append(ob), gts.append(gt)
+        obs.append(ob), gts.append(gt), dts.append(dts)
     # Make trials of equal time length:
     obs_lens = [len(o) for o in obs]
     max_len = np.max(obs_lens)
@@ -374,8 +399,14 @@ def get_trials_batch(envs, batch_size, config):
     labels = torch.from_numpy(gts).type(torch.long).to(config.device)
 
     # index -> one-hot vector
-    labels = (F.one_hot(labels, num_classes=config.output_size)).float() 
-    return (inputs.permute([1,0,2]), labels.permute([1,0,2])) # using time first [time, batch, input]
+    if labels.shape[-1] > 1:
+        labels = (F.one_hot(labels, num_classes=config.output_size)).float() 
+    else:
+        labels = labels.float()
+    if return_dist_mean_for_Nassar_tasks:
+        return (inputs.permute([1,0,2]), labels.permute([1,0,2]), dts) # using time first [time, batch, input]
+    else:
+        return (inputs.permute([1,0,2]), labels.permute([1,0,2])) # using time first [time, batch, input]
 
 
 # In[16]:

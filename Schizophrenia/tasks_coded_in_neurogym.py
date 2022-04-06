@@ -11,17 +11,23 @@ from utils import stats
 
 class NoiseyMean(TrialEnv):
     def __init__(self, mean_noise= 0.1, mean_drift = 0, odd_balls_prob = 0.0, change_point_prob = 0.0, safe_trials = 5):
-        super().__init__()
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))#, name = ['outcome'])
-        self.latent_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))#, names = ['mean'])
-        self.action_space = gym.spaces.Box(low=0.0, high=1.0, shape=(1,))
+        super().__init__(dt=1)
+
+
+        self.observation_space = ngym.spaces.Box(low=0.0, high=1.0, shape=(1,), name = {'outcomes':[0]})
+        self.latent_space = ngym.spaces.Box(low=0.0, high=1.0, shape=(1,))#, names = ['mean'])
+        self.action_space = ngym.spaces.Box(low=0.0, high=1.0, shape=(1,))
         
         #get initial random values
         self.outcome_now = self.observation_space.sample()
         self.mean_now = self.latent_space.sample()
 
+                # Setting default task timing
         self.trial_len = 100
         self.far_definition = 0.3 *self.observation_space.__getattribute__('high')
+        self.trial_length = sum(self.timing.values())
+
+        self.timing = {'outcomes': self.trial_len}
 
         self.mean_drift = mean_drift 
         self.odd_balls_prob =odd_balls_prob 
@@ -30,8 +36,14 @@ class NoiseyMean(TrialEnv):
         self.safe_trials = safe_trials
 
     def _new_trial(self):
+        # Setting time periods for this trial
+        periods = ['outcomes']
+        # Will add stimulus and decision periods sequentially using self.timing info
+        self.add_period(periods)
+
         self.outcome_now = self.observation_space.sample()
         self.mean_now = self.latent_space.sample()
+
         outcomes, means = [], []
         oddballs = np.zeros(self.trial_len)
         changepoints = np.zeros(self.trial_len)
@@ -72,6 +84,7 @@ class NoiseyMean(TrialEnv):
         # Sample observation for the next trial
         self.next_ob = np.random.uniform(0, 1, size=(1,))
         
+
         trial = dict()
         # Ground-truth is 1 if ob > 0, else 0
         trial['outcomes'] = np.stack(outcomes)
@@ -79,6 +92,9 @@ class NoiseyMean(TrialEnv):
         trial['oddballs'] = oddballs
         trial['changepoints'] = changepoints
         trial['ground_truth'] = np.stack(outcomes)
+
+        self.add_ob(trial['outcomes'], period='outcomes', where='outcomes')
+        self.set_groundtruth(trial['ground_truth'])
 
         return trial
     
@@ -196,6 +212,7 @@ class Shrew_task(TrialEnv):
         return self.ob_now, reward, done, info
 test = True
 test = False
+test_changepoint = False
 if test:
 
     env = Shrew_task(attend_to='either', context=1,  no_of_coherent_cues=9)
@@ -208,3 +225,22 @@ if test:
     for i in range(20):
         t = env.new_trial()
         print(env.gt)
+if test_changepoint:
+    params = {
+        'noisy_mean':       [0.05, 0, 0 , 0], 
+        'drifting_mean':    [0.05, 0.05, 0 , 0],
+        'oddball':          [0.05,  0.05, 0.1, 0],
+        'changepoint':      [0.05, 0.0, 0.0 , 0.1]
+    }
+    param= params['oddball']
+    env =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
+
+    t = env.new_trial()
+    ob_size = env.observation_space.shape[0]
+    act_size = env.action_space.shape[0]
+    print('ob_size :', ob_size, '   act_size: ', act_size)
+    print(env.ob)
+    print(env.gt)
+    for i in range(20):
+        t = env.new_trial()
+        print(env.gt.shape)
