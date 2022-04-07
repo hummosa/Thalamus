@@ -343,7 +343,8 @@ def accuracy_metric(outputs, labels):
 def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     # gt = torch.argmax(labels, -1)
-    input, output, distMeans = get_trials_batch(env, 100, config,return_dist_mean_for_Nassar_tasks=True)
+    input, output, trials = get_trials_batch(env, 100, config,return_dist_mean_for_Nassar_tasks=True)
+    distMeans = trials['means']
     pred, _ = net(input, sub_id=context_id)
     plt.close('all')
     fig, ax = plt.subplots(1,1)
@@ -361,9 +362,11 @@ def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # ax.set_title('Oddball condition' if exp_type == 'Oddball' else 'Change-point condition')
     plt.savefig('./files/'+ config.exp_name+f'/Example_perf_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.jpg', dpi=200)
 
+    # save outputs, means, inputs. also CHange points and oddballs. 
+    np.save('./files/'+ config.exp_name+f'/data_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.data', trials, allow_pickle=True)
+    # calculate how far from actual mean..
+    # calculate the response to oddballs vs changepoints. 
 
-
-# In[6]:
 
 def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks=False):
     # check if only one env or several and ensure it is a list either way.
@@ -377,7 +380,9 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
         trial= env.new_trial()
         ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
         assert not np.any(np.isnan(ob))
-        obs.append(ob), gts.append(gt), dts.append(trial['means'])
+        obs.append(ob), gts.append(gt)
+        if return_dist_mean_for_Nassar_tasks:
+            dts.append(trial)
     # Make trials of equal time length:
     obs_lens = [len(o) for o in obs]
     max_len = np.max(obs_lens)
