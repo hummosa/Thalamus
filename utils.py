@@ -326,6 +326,7 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
         action_accuracy = accuracy_metric(action_pred, labels)
         action_accuracies[context_id] = action_accuracy
 #         import pdb; pdb.set_trace()
+        
     return((fixation_accuracies, action_accuracies))
 
 # In[5]:
@@ -339,25 +340,26 @@ def accuracy_metric(outputs, labels):
         action_accuracy = ((abs(outputs - labels ) < 0.1).float()).mean()
     return(action_accuracy.detach().cpu().numpy())
 
-def plot_Nassar_task(env, config, context_id, filename, net):
+def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     # gt = torch.argmax(labels, -1)
-    input, output, distMeans = get_trials_batch(env, 2, config,return_dist_mean_for_Nassar_tasks=True)
+    input, output, distMeans = get_trials_batch(env, 100, config,return_dist_mean_for_Nassar_tasks=True)
     pred, _ = net(input, sub_id=context_id)
     plt.close('all')
     fig, ax = plt.subplots(1,1)
     # ax = axes.flatten()[0]
     color1 = 'tab:blue'
     color2 = 'tab:red'
-    ax.plot(pred.detach().cpu().numpy()[-1,  ], '.', label='RNN preds', color=color2 ,markersize = 5, alpha=1)
-    ax.plot(input.cpu().numpy()[-1, :-1], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
+    ax.plot(pred.detach().cpu().numpy()[:,-1, : ], '.', label='RNN preds', color=color2 ,markersize = 5, alpha=1)
+    ax.plot(input.cpu().numpy()[:,-1, :], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
     ax.plot(distMeans[-1], ':', label='Dist mean', color=color1)
     # ax.plot(rnn.zs_block[-1,:,:]  , label='Z', linewidth=0.5)
     ax.set_xlabel('Trials')
     ax.set_ylabel('Rewarded position')
+    ax.set_ylim([-0.1, 1.1])
     ax.legend()
     # ax.set_title('Oddball condition' if exp_type == 'Oddball' else 'Change-point condition')
-    plt.savefig(f'./current_results_.jpg', dpi=200)
+    plt.savefig('./files/'+ config.exp_name+f'/Example_perf_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.jpg', dpi=200)
 
 
 
@@ -375,7 +377,7 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
         trial= env.new_trial()
         ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
         assert not np.any(np.isnan(ob))
-        obs.append(ob), gts.append(gt), dts.append(dts)
+        obs.append(ob), gts.append(gt), dts.append(trial['means'])
     # Make trials of equal time length:
     obs_lens = [len(o) for o in obs]
     max_len = np.max(obs_lens)
@@ -396,13 +398,13 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
 
     # numpy -> torch
     inputs = torch.from_numpy(obs).type(torch.float).to(config.device)
-    labels = torch.from_numpy(gts).type(torch.long).to(config.device)
+    labels = torch.from_numpy(gts).type(torch.float).to(config.device)
 
     # index -> one-hot vector
     if labels.shape[-1] > 1:
-        labels = (F.one_hot(labels, num_classes=config.output_size)).float() 
-    else:
-        labels = labels.float()
+        labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float()  # Had to make it into integers for one_hot then turn it back to float.
+    else: #If Nassar task
+        labels = labels # Keeping as floats for Nassar tasks. No one-hot encoding. 
     if return_dist_mean_for_Nassar_tasks:
         return (inputs.permute([1,0,2]), labels.permute([1,0,2]), dts) # using time first [time, batch, input]
     else:

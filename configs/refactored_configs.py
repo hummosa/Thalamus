@@ -213,7 +213,7 @@ class Schizophrenia_config(object):
                     'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
                     ] 
         elif exp_type == 'noisy_mean':
-            self._tasks= ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']
+            self._tasks= [ 'oddball', 'changepoint','noisy_mean', 'drifting_mean']
 
         # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
@@ -241,7 +241,7 @@ class Schizophrenia_config(object):
         self.batch_size = 100
 
         #  training paradigm
-        self.max_trials_per_task = 80000
+        self.max_trials_per_task = 20000
         self.use_multiplicative_gates = True 
         self.use_additive_gates = False 
         self.train_to_criterion = True

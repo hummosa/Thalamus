@@ -55,6 +55,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
+            
             context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
@@ -70,7 +71,6 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss.backward()
            
             optimizer.step()
-            
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
             # plt.savefig('example_inpujt_label_output.jpg')
@@ -127,6 +127,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
             if ((running_acc > criterion_accuaracy) and config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
                 running_acc = 0.
+                utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             running_acc = 0.7 * running_acc + 0.3 * acc
 
@@ -277,8 +278,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             
             outputs, rnn_activity = net(inputs, sub_id=context_id)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
-            utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, filename=None, net=net )
-
+            
             buffer_acts.append(rnn_activity.detach().cpu().numpy().mean(0))
             buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
             buffer_accuracies.append(acc)
@@ -358,6 +358,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             if ((running_acc > criterion_accuaracy) and config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
+                utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             step_i+=1
             running_acc = 0.7 * running_acc + 0.3 * acc

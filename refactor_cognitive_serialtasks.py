@@ -112,7 +112,7 @@ config.gates_divider = 1.0
 config.gates_offset = 0.0
 
 config.train_gates = True
-config.save_model = False
+config.save_model = True
 
 config.optimize_policy  = False
 config.optimize_td      = False

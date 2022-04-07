@@ -36,6 +36,8 @@ class NoiseyMean(TrialEnv):
         self.safe_trials = safe_trials
 
     def _new_trial(self):
+
+
         # Setting time periods for this trial
         periods = ['outcomes']
         # Will add stimulus and decision periods sequentially using self.timing info
@@ -210,9 +212,9 @@ class Shrew_task(TrialEnv):
         # By default, the trial is not ended
         info = {'new_trial': False}
         return self.ob_now, reward, done, info
-test = True
+# test = True
 test = False
-test_changepoint = False
+test_changepoint = True
 if test:
 
     env = Shrew_task(attend_to='either', context=1,  no_of_coherent_cues=9)
@@ -241,6 +243,16 @@ if test_changepoint:
     print('ob_size :', ob_size, '   act_size: ', act_size)
     print(env.ob)
     print(env.gt)
-    for i in range(20):
+
+    from time import perf_counter
+
+
+    t1_start = perf_counter()
+    for i in range(100):
         t = env.new_trial()
-        print(env.gt.shape)
+        # print(env.gt.shape)
+    t2_start = perf_counter()
+    t3_start = perf_counter()
+    t4_start = perf_counter()
+    print(f't1: {t2_start-t1_start} t2: {t3_start-t2_start} t3: {t4_start-t3_start}')
+        #The main loop below takes 0.017 which for a batch of 100 is 1.7 seconds! Not sure how to shorten. Other than pre-generate all trials and save to desk.
