@@ -38,12 +38,10 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
         build_env(config, envs, task_id, task_name)
-
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
         #if the last task in shuffle training_ extend it to 400 trials
-
         task_id = int(task_id)
         env = envs[int(task_id)]
         bar_tasks.set_description('i: ' + str(step_i))
@@ -55,7 +53,6 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
-            
             context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
@@ -123,12 +120,16 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
  
                 #### End testing
             step_i+=1
-            training_log.trials_to_crit[-1] += 1 # increment the total trials spent on this current task
+            
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
-            if ((running_acc > criterion_accuaracy) and config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
+            if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
+            # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
-                utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
-                break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
+                if training_log.trials_to_crit[-1] == 0: # if no trial to crit recorded previously
+                    training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
+                # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
+                if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
+                    break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             running_acc = 0.7 * running_acc + 0.3 * acc
 
 
@@ -147,12 +148,16 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     return(testing_log, training_log, net)
 
 def build_env(config, envs, task_id, task_name):
-    if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint']:
+    if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint', 'oddball1', 'oddball2', 'oddball3','oddball4',]:
         params = {
                 'noisy_mean':       [0.05, 0, 0 , 0], 
                 'drifting_mean':    [0.05, 0.05, 0 , 0],
                 'oddball':          [0.05,  0.05, 0.1, 0],
-                'changepoint':      [0.05, 0.0, 0.0 , 0.1]
+                'changepoint':      [0.05, 0.0, 0.0 , 0.1],
+                'oddball1':          [0.05,  0.05, 0.1, 0],
+                'oddball2':          [0.05,  0.05, 0.2, 0],
+                'oddball3':          [0.05,  0.05, 0.3, 0],
+                'oddball4':          [0.05,  0.05, 0.4, 0],
             }
         param= params[task_name]
         envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
@@ -223,6 +228,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
         running_frustration = 0
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
+        config.one_batch_success = False
         for i in training_bar:
 
             if config.optimize_td:
@@ -261,7 +267,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 policy_context_id = torch.ones([1,config.md_size])/config.md_size    
                 policy_context_id = policy_context_id.repeat([config.batch_size, 1])
 
-            if config.optimize_td or config.optimize_bu:
+            if config.one_batch_optimization and not config.one_batch_success:
                 if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
                     inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             else:
@@ -351,15 +357,20 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 net.train()
  
                 #### End testing
-            training_log.trials_to_crit[-1] += 1 # increment the total trials spent on this current task
             # relax a little! Only optimizing context signal!
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
             criterion_accuaracy -=0.1
-            if ((running_acc > criterion_accuaracy) and config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
+            if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
-                utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
-                break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
+                if training_log.trials_to_crit[-1] == 0: # if no trial to crit recorded previously
+                    training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
+                # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
+                if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
+                    # if not config.one_batch_success: # uncomment these if needing to test accuracy after the one batch task inference on more batches. In reality once the model figures out a batch, it is accurate on all others. 
+                    #     config.one_batch_success = True
+                    # else:
+                        break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             step_i+=1
             running_acc = 0.7 * running_acc + 0.3 * acc
         task_i +=1
@@ -367,9 +378,6 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     training_log.optimizing_total_batches, testing_log.optimizing_total_batches = step_i, step_i
 
     return(testing_log, training_log, net)
-
-
-
 
 
 def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
@@ -390,50 +398,3 @@ def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
     plt.savefig(f'./files/to_animate/example_context_ids_{step_i:05}.jpg')
     plt.savefig(f'./files/to_animate/example_context_ids.jpg')
     plt.close('all')
-
-
-def pre_train_td(config, cog_net, training_log):
-    config.horizon =50
-    cog_optimizer = 'missing optimizer'
-    acts = np.stack(training_log.rnn_activity[-config.horizon:])  # (3127, 100, 356)
-    outputs_horizon = np.stack(training_log.outputs[-config.horizon:])
-    labels_horizon = np.stack(training_log.labels[-config.horizon:])
-    task_ids = np.stack(training_log.task_ids[-config.horizon:])
-    rl = np.argmax(labels_horizon, axis=-1)
-    ro = np.argmax(outputs_horizon, axis=-1)
-    accuracies = (rl==ro).astype(np.float32)
-
-    # previous_acc = np.concatenate([accuracies[:1], accuracies ])[:-1] #shift by one place to make it run one step behind. 
-    expanded_previous_acc = np.repeat(accuracies[..., np.newaxis], 10, axis=-1)   #Expanded merely to emphasize their signal over the numerous acts
-    gathered_inputs = np.concatenate([acts, labels_horizon, expanded_previous_acc], axis=-1) #shape  7100 100 266
-
-    task_ids_oh= F.one_hot(torch.from_numpy(task_ids).long(), config.md_size)
-    task_ids_repeated = task_ids[..., np.newaxis].repeat(100,1)
-    
-    training_inputs = gathered_inputs
-    # training_outputs= task_ids_oh.reshape([task_ids_oh.shape[0], 1, task_ids_oh.shape[1]]).repeat([1,training_inputs.shape[1], 1])
-    training_outputs= task_ids_repeated
-    ins =  torch.tensor(training_inputs, device=config.device) # (input_length, 100, 266)
-    outs = torch.tensor(training_outputs, device=config.device).long()
-    #################################################
-    current_task_id = 'where to get from'
-    cog_optimizer.zero_grad()
-    # cin = torch.cat([rnn1_means.detach(), labels_horizon[-1]],dim =-1)
-    # cin = cin.reshape([1, *cin.shape])
-    # cog_out = cog_net(cin)
-    cog_out, cog_acts = cog_net(ins) # Cog_out shape [horizon, batch, 15]
-    tids = torch.tensor([current_task_id]*100, device=config.device)
-    # cog_loss  = F.cross_entropy(input=cog_out.cpu().squeeze(), target=tids.type(torch.LongTensor))
-    #Train on all task_ids in horizon:
-    cog_loss = F.cross_entropy(input= cog_out.squeeze().permute([0,2,1]) , target = outs)
-    # Or just the current task:
-    # cog_loss = F.cross_entropy(input= cog_out.squeeze()[-1] , target = tids)
-    # if step_i < 4000: # start testing cog obs on useen data
-    cog_loss.backward()
-    cog_optimizer.step()
-
-    training_log.cog_obs_preds.append(cog_out.detach().cpu().numpy())
-
-    # if step_i > 100 and (step_i % (config.print_every_batches*50) == (config.print_every_batches*50 - 1)):
-        # _,_,cacc = test_model(cog_net, ins, task_ids, step_i)    
-    # training_bar.set_description('cog_ls, acc: {:0.3F}, {:0.2F} '.format(cog_loss.item(), acc)+ config.human_task_names[task_id])

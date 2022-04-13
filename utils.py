@@ -337,14 +337,15 @@ def accuracy_metric(outputs, labels):
     if labels.shape[-1] > 1: # checking it is not the Nassar tasks
         action_accuracy = (gt[-1,:] == ap[ -1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
     else: # IF NASSAR tasks
-        action_accuracy = ((abs(outputs - labels ) < 0.1).float()).mean()
+        action_accuracy = ((abs(outputs - labels ) < 0.05).float()).mean()
     return(action_accuracy.detach().cpu().numpy())
 
 def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     # gt = torch.argmax(labels, -1)
     input, output, trials = get_trials_batch(env, 100, config,return_dist_mean_for_Nassar_tasks=True)
-    distMeans = trials['means']
+    # distMeans = []
+    # [distMeans.append(trial['means']) for trial in trials]
     pred, _ = net(input, sub_id=context_id)
     plt.close('all')
     fig, ax = plt.subplots(1,1)
@@ -352,8 +353,8 @@ def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     color1 = 'tab:blue'
     color2 = 'tab:red'
     ax.plot(pred.detach().cpu().numpy()[:,-1, : ], '.', label='RNN preds', color=color2 ,markersize = 5, alpha=1)
-    ax.plot(input.cpu().numpy()[:,-1, :], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
-    ax.plot(distMeans[-1], ':', label='Dist mean', color=color1)
+    ax.plot(output.cpu().numpy()[:,-1, :], '.', label='Ground truth',  color=color1,markersize = 4, alpha=0.7)
+    # ax.plot(distMeans[-1], ':', label='Dist mean', color=color1)
     # ax.plot(rnn.zs_block[-1,:,:]  , label='Z', linewidth=0.5)
     ax.set_xlabel('Trials')
     ax.set_ylabel('Rewarded position')
@@ -362,8 +363,10 @@ def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # ax.set_title('Oddball condition' if exp_type == 'Oddball' else 'Change-point condition')
     plt.savefig('./files/'+ config.exp_name+f'/Example_perf_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.jpg', dpi=200)
 
+
     # save outputs, means, inputs. also CHange points and oddballs. 
     np.save('./files/'+ config.exp_name+f'/data_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.data', trials, allow_pickle=True)
+    np.save('./files/'+ config.exp_name+f'/preds_{config.exp_signature}_{training_log.stamps[-1]}_{task_name}.data', pred.detach().cpu().numpy(), allow_pickle=True)
     # calculate how far from actual mean..
     # calculate the response to oddballs vs changepoints. 
 

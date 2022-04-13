@@ -49,18 +49,19 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='temp', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='neurips/brittle_policy', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 # my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='random_gates_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='gates mean ')
+my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='gates std')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=14, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=3, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -71,11 +72,21 @@ rng = np.random.default_rng(int(args.seed))
 
 config = SerialConfig()
 
+config.use_multiplicative_gates = False
+config.use_additive_gates = False
 if args.experiment_type == 'same_net': # this shows that sequential fails right away
         config.same_rnn = True
+        config.train_to_criterion = False
+        config.use_rehearsal = False
 if args.experiment_type == 'train_to_criterion': # demo ttc and introduce metric ttc. Start testing for accelerateion
         config.same_rnn = True
         config.train_to_criterion = True
+        config.use_rehearsal = False
+if args.experiment_type == 'random_gates_no_rehearsal': 
+    config = Gates_no_rehearsal_config()
+if args.experiment_type == 'random_gates_no_train_to_criterion': 
+    config = Gates_no_train_to_criterion_config()
+
 if args.experiment_type == 'rehearsal':  # introduce first time learning vs subsequent rehearsals.
         config.same_rnn = True
         config.train_to_criterion = True
@@ -86,13 +97,11 @@ if args.experiment_type == 'random_gates_add':
     config = Gates_add_config()
 if args.experiment_type == 'random_gates_both': 
     config = Gates_add_config()
-    config.use_multiplicative_gates =True
+    config.use_multiplicative_gates =True  
 if args.experiment_type == 'shuffle_mul': 
     config = Shuffle_mul_config()
 if args.experiment_type == 'shuffle_add': 
     config = Shuffle_add_config()
-if args.experiment_type == 'random_gates_no_rehearsal': 
-    config = Gates_no_rehearsal_config()
 if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean': 
     config = Schizophrenia_config(args.experiment_type)
     args.num_of_tasks = len(config.tasks)
@@ -105,23 +114,23 @@ config.saved_model_sig = f'seed{args.seed}_paradigm_{"shuf" if config.paradigm_s
 config.exp_signature = config.saved_model_sig +  config.exp_signature #+ f'_{"corr" if config.load_gates_corr else "nocorr"}_{"co" if config.use_cognitive_observer else "noc"}_{"reh" if config.use_rehearsal else "noreh"}_{"tc" if config.train_to_criterion else "nc"}_{"mul" if config.use_multiplicative_gates else "add"}_{"gates" if config.use_gates else "nog"}'
 config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.saved_model_sig}.torch'
 # config.saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
-config.gates_mean = args.var1
-config.gates_std = args.var3
-config.gates_sparsity = args.var4
+# config.gates_mean = args.var1
+# config.gates_std = args.var3
+# config.gates_sparsity = args.var4
 config.gates_divider = 1.0
 config.gates_offset = 0.0
 
-config.train_gates = True
+config.train_gates = False
 config.save_model = True
 
-config.optimize_policy  = False
+config.optimize_policy  = True
 config.optimize_td      = False
-config.optimize_bu      = True
+config.optimize_bu      = False
 
 config.higher_order = True
 if config.higher_order:
     config.gates_divider = 1.2
-    config.random_rehearsals = 20 if config.paradigm_sequential else 4000
+    config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
@@ -155,6 +164,7 @@ task_seq_sequential = []
 no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
 if no_of_tasks_left > 0: 
     novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
+    sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     # learn one novel task then rehearse previously learned + novel task
     task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
 
@@ -176,6 +186,11 @@ for _ in range(config.random_rehearsals):
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     random.shuffle(sub_seq)
     task_seq_random+=sub_seq
+task_seq_optimize = []
+for _ in range(5):
+    sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
+    random.shuffle(sub_seq)
+    task_seq_optimize+=sub_seq
 
 # main loop
 net = RNN_MD(config)
@@ -218,8 +233,8 @@ if config.higher_order:
     if config.paradigm_shuffle:
         config.print_every_batches = 10
         config.train_to_criterion = True
-        config.max_trials_per_task = 40000
-    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_random[:10], testing_log, training_log, step_i = step_i )
+        config.max_trials_per_task = 80000
+    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize[:40], testing_log, training_log, step_i = step_i )
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
@@ -236,3 +251,6 @@ viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
 
 if config.higher_order and not config.optimize_policy:
     viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+
+# TODO Follow up on the gates_divider and its potential effects on TU BU or policy. 
+# TODO Review 

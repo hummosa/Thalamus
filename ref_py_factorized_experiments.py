@@ -10,18 +10,19 @@ job_limit = 100 # jobs allowed submitted at once.
 
 #%% Create the parameters for experiments in a table (expVars list of lists)
 experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates',  'correlated_gates', 'cognitive_observer', ]
-experiments = [ 'rehearsal', 'random_gates',  'correlated_gates',]
 experiments = ['shuffle_add', 'shuffle_mul', 'random_gates_add', 'random_gates_mul','random_gates_both',] #  
-# experiments = ['random_gates_mul',] #  
+experiments = [ 'rehearsal', 'random_gates',  'correlated_gates',]
+experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates_mul',]
+experiments += ['random_gates_no_train_to_criterion', 'random_gates_no_rehearsal'] #  
 
 num_of_tasks_to_run = [14] 
-exp_sig = 'gates_compare_learn'
+exp_sig = 'final_policy_weaning'
 
-Seeds = range(0, 9)
-Var1 = [(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
+Seeds = range(0, 5)
+Var1 = range(0, 20, 5) #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
 Var2 = num_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
-Var3 = [(x/10) for x in range(0,1, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
-Var4 = [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
+Var3 = [1] # [(x/10) for x in range(0,1, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
+Var4 = [1] # [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 
 
 

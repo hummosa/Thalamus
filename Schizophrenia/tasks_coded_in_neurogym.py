@@ -27,17 +27,16 @@ class NoiseyMean(TrialEnv):
         self.far_definition = 0.3 *self.observation_space.__getattribute__('high')
         self.trial_length = sum(self.timing.values())
 
-        self.timing = {'outcomes': self.trial_len}
+        self.timing = {'outcomes': self.trial_len-1}
 
         self.mean_drift = mean_drift 
         self.odd_balls_prob =odd_balls_prob 
         self.mean_noise= mean_noise
         self.change_point_prob = change_point_prob
         self.safe_trials = safe_trials
+        self.hazzard_rate = max(odd_balls_prob, change_point_prob)
 
-    def _new_trial(self):
-
-
+    def _new_trial_old(self):
         # Setting time periods for this trial
         periods = ['outcomes']
         # Will add stimulus and decision periods sequentially using self.timing info
@@ -51,12 +50,11 @@ class NoiseyMean(TrialEnv):
         changepoints = np.zeros(self.trial_len)
         s = self.safe_trials
         for i in range(self.trial_len):
-            
             self.outcome_now = rng.normal(self.mean_now, self.mean_noise)
             while((self.outcome_now < self.observation_space.__getattribute__('low')) or (self.outcome_now > self.observation_space.__getattribute__('high'))):
                 self.outcome_now = rng.normal(self.mean_now, self.mean_noise)
             self.mean_now = rng.normal(self.mean_now, self.mean_drift)
-            self.outcome_now = np.clip(self.outcome_now, 0, 1)
+            # self.outcome_now = np.clip(self.outcome_now, 0, 1)
             self.mean_now = np.clip(self.mean_now, 0, 1)
             
             if s == 0: # safety period over
@@ -86,18 +84,56 @@ class NoiseyMean(TrialEnv):
         # Sample observation for the next trial
         self.next_ob = np.random.uniform(0, 1, size=(1,))
         
-
         trial = dict()
         # Ground-truth is 1 if ob > 0, else 0
-        trial['outcomes'] = np.stack(outcomes)
+        _outcomes = np.stack(outcomes)
+        trial['outcomes'] = _outcomes[:-1]
         trial['means'] = np.stack(means)
         trial['oddballs'] = oddballs
         trial['changepoints'] = changepoints
-        trial['ground_truth'] = np.stack(outcomes)
+        trial['ground_truth'] = _outcomes[1:]
 
         self.add_ob(trial['outcomes'], period='outcomes', where='outcomes')
         self.set_groundtruth(trial['ground_truth'])
+        return trial
+    def _new_trial(self):
+        # Setting time periods for this trial
+        periods = ['outcomes']
+        # Will add stimulus and decision periods sequentially using self.timing info
+        self.add_period(periods)
 
+        events = rng.binomial(1, self.hazzard_rate, self.trial_len)
+        magnitude_pos = rng.uniform(0.2,0.6, self.trial_len)
+        magnitude_neg = rng.uniform(-0.6,-0.2, self.trial_len)
+        magnitude = np.choose(rng.binomial(1, 0.5, self.trial_len), [magnitude_neg, magnitude_pos])
+
+        gaussian_samples = rng.normal( 0, self.mean_noise, size=(self.trial_len))
+        if self.change_point_prob > 0.:
+            gaussian_samples[events.astype(bool)] += magnitude[events.astype(bool)]
+        if self.mean_drift > 0.:
+            gaussian_samples[0] = rng.uniform(0.3, 0.7)
+            gaussian_samples = np.cumsum(gaussian_samples)
+        else:
+            if self.change_point_prob > 0.:
+                zero_samples = np.zeros(self.trial_len)
+                zero_samples[events.astype(bool)] += magnitude[events.astype(bool)]
+                gaussian_samples += np.cumsum(zero_samples)
+            gaussian_samples+= rng.uniform(0.3, 0.7)
+        if self.odd_balls_prob > 0.:
+            gaussian_samples[events.astype(bool)] += magnitude[events.astype(bool)]
+
+        _outcomes = abs(gaussian_samples)
+        _outcomes = _outcomes.reshape([-1, 1])
+        trial = dict()
+        # Ground-truth is 1 if ob > 0, else 0
+        trial['outcomes'] = _outcomes[:-1, :]
+        # trial['means'] = np.stack(means)
+        trial['oddballs'] = events
+        trial['changepoints'] = events
+        trial['ground_truth'] = _outcomes[1:, :]
+
+        self.add_ob(trial['outcomes'], period='outcomes', where='outcomes')
+        self.set_groundtruth(trial['ground_truth'])
         return trial
     
     def _step(self, action):
@@ -214,7 +250,8 @@ class Shrew_task(TrialEnv):
         return self.ob_now, reward, done, info
 # test = True
 test = False
-test_changepoint = True
+# test_changepoint = True
+test_changepoint = False
 if test:
 
     env = Shrew_task(attend_to='either', context=1,  no_of_coherent_cues=9)

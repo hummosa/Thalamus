@@ -79,6 +79,7 @@ class BaseConfig(object):
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
         self.paradigm_alternate = False
+        self.one_batch_optimization = True  # Use only one batch to infer task rule input. 
 
         # RNN model
         self.input_size = 33
@@ -89,9 +90,9 @@ class BaseConfig(object):
 
         #gates statis
         self.train_gates = False
-        self.gates_sparsity = 0.5
-        self.gates_mean = 1.2
-        self.gates_std = 0.05
+        self.gates_sparsity = 0.4
+        self.gates_mean = 1.0
+        self.gates_std = 0.0
         self.gates_gaussian_cut_off = -0.3
         self.MD2PFC_prob = 0.5
         # test & plot
@@ -187,6 +188,11 @@ class Gates_no_rehearsal_config(Gates_mul_config):
     def __init__(self, args= []):
         super(Gates_no_rehearsal_config, self).__init__()
         self.use_rehearsal = False
+class Gates_no_train_to_criterion_config(Gates_mul_config):
+    def __init__(self, args= []):
+        super().__init__()
+        self.use_rehearsal = False
+        self.train_to_criterion = False
 
 ############################################
 class SerialConfig(BaseConfig):
@@ -213,13 +219,14 @@ class Schizophrenia_config(object):
                     'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
                     ] 
         elif exp_type == 'noisy_mean':
-            self._tasks= [ 'oddball', 'changepoint','noisy_mean', 'drifting_mean']
+            self._tasks= ['noisy_mean',  'oddball', 'changepoint','drifting_mean']
+            # self._tasks= [ 'oddball4', 'oddball3','oddball2','oddball1',]
 
         # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
         self.tasks = self._tasks
         # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
-        self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
+        self.human_task_names = self.tasks 
         self.num_of_tasks = len(self.tasks)
 
 
@@ -241,7 +248,7 @@ class Schizophrenia_config(object):
         self.batch_size = 100
 
         #  training paradigm
-        self.max_trials_per_task = 20000
+        self.max_trials_per_task = 80000
         self.use_multiplicative_gates = True 
         self.use_additive_gates = False 
         self.train_to_criterion = True
