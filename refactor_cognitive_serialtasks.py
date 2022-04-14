@@ -55,13 +55,13 @@ my_parser.add_argument('exp_name',  default='neurips/brittle_policy', type=str, 
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 # my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='random_gates_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
+my_parser.add_argument('--var1',  default=1, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='gates std')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=3, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -84,8 +84,10 @@ if args.experiment_type == 'train_to_criterion': # demo ttc and introduce metric
         config.use_rehearsal = False
 if args.experiment_type == 'random_gates_no_rehearsal': 
     config = Gates_no_rehearsal_config()
-if args.experiment_type == 'random_gates_no_train_to_criterion': 
-    config = Gates_no_train_to_criterion_config()
+if args.experiment_type == 'random_gates_only': 
+    config = random_gates_only_config()
+if args.experiment_type == 'random_gates_rehearsal_no_train_to_criterion': 
+    config = Gates_rehearsal_no_train_to_criterion_config()
 
 if args.experiment_type == 'rehearsal':  # introduce first time learning vs subsequent rehearsals.
         config.same_rnn = True
@@ -123,9 +125,9 @@ config.gates_offset = 0.0
 config.train_gates = False
 config.save_model = True
 
-config.optimize_policy  = True
+config.optimize_policy  = False
 config.optimize_td      = False
-config.optimize_bu      = False
+config.optimize_bu      = True
 
 config.higher_order = True
 if config.higher_order:

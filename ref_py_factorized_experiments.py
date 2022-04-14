@@ -13,10 +13,10 @@ experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates',  '
 experiments = ['shuffle_add', 'shuffle_mul', 'random_gates_add', 'random_gates_mul','random_gates_both',] #  
 experiments = [ 'rehearsal', 'random_gates',  'correlated_gates',]
 experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates_mul',]
-experiments += ['random_gates_no_train_to_criterion', 'random_gates_no_rehearsal'] #  
+experiments += ['random_gates_only', 'random_gates_no_rehearsal', 'random_gates_rehearsal_no_train_to_criterion'] #  
 
 num_of_tasks_to_run = [14] 
-exp_sig = 'final_policy_weaning'
+exp_sig = 'final_bu'
 
 Seeds = range(0, 5)
 Var1 = range(0, 20, 5) #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
@@ -51,7 +51,7 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 01:10:00"
+    , "#SBATCH -t 01:20:00"
     , "#SBATCH --gres=gpu:1"
     , "#SBATCH --constraint=high-capacity"
     , "#SBATCH -p halassa"

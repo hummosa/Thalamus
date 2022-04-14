@@ -188,10 +188,15 @@ class Gates_no_rehearsal_config(Gates_mul_config):
     def __init__(self, args= []):
         super(Gates_no_rehearsal_config, self).__init__()
         self.use_rehearsal = False
-class Gates_no_train_to_criterion_config(Gates_mul_config):
+class random_gates_only_config(Gates_mul_config):
     def __init__(self, args= []):
         super().__init__()
         self.use_rehearsal = False
+        self.train_to_criterion = False
+class Gates_rehearsal_no_train_to_criterion_config(Gates_mul_config):
+    def __init__(self, args= []):
+        super().__init__()
+        self.use_rehearsal = True
         self.train_to_criterion = False
 
 ############################################
