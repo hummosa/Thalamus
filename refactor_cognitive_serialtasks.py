@@ -49,19 +49,19 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='neurips/brittle_policy', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='neurips/bu', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
-# my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=1, nargs='?', type=float, help='gates mean ')
+my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--seed', default=2, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='gates std')
+my_parser.add_argument('--var3',  default=0.2, nargs='?', type=float, help='gates std')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=14, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -118,6 +118,7 @@ config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.sa
 # config.saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
 # config.gates_mean = args.var1
 # config.gates_std = args.var3
+config.rehearsal_base_prob = args.var3
 # config.gates_sparsity = args.var4
 config.gates_divider = 1.0
 config.gates_offset = 0.0
@@ -129,7 +130,7 @@ config.optimize_policy  = False
 config.optimize_td      = False
 config.optimize_bu      = True
 
-config.higher_order = True
+config.higher_order = False
 if config.higher_order:
     config.gates_divider = 1.2
     config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
@@ -146,6 +147,8 @@ if config.paradigm_sequential:
     # Add tasks gradually with rehearsal 1 2 1 2 3 1 2 3 4 ...
     if config.use_rehearsal:
         task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
+        # probabilistic rehearsal where old tasks are rehearsed exponentially less frequent.
+        # task_sub_seqs = [[config.tasks_id_name[i] for i in range(s) if np.random.uniform() < np.exp(-0.1*((s-i)+.3))+config.rehearsal_base_prob] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
         for sub_seq in task_sub_seqs: 
             task_seq+=sub_seq
         task_seq+=sub_seq # One additional final rehearsal, 
@@ -236,7 +239,7 @@ if config.higher_order:
         config.print_every_batches = 10
         config.train_to_criterion = True
         config.max_trials_per_task = 80000
-    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize[:40], testing_log, training_log, step_i = step_i )
+    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize[:20], testing_log, training_log, step_i = step_i )
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)

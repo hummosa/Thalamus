@@ -48,7 +48,13 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.switch_trialxxbatch.append(step_i)
         training_log.switch_task_id.append(task_id)
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
+        criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
         
+        if config.abort_rehearsal_if_accurate:
+            if len(testing_log.accuracies)>0: 
+                if (testing_log.accuracies[-1][task_id]) > criterion_accuaracy:
+                    break
+
         running_frustration = 0
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
@@ -121,7 +127,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 #### End testing
             step_i+=1
             
-            criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
+            
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
@@ -352,14 +358,20 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                         ) 
 
                     testing_log.accuracies.append(act_perf)
-                    testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
+                    gradients_past = min(step_i-training_log.start_optimizing_at, config.print_every_batches) # to avoid np.stack gradients from training and optimization. They might be of different lengths
+                    try:
+                        testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
+                    except:
+                        pass
                 # torch.set_grad_enabled(False)
                 net.train()
  
                 #### End testing
+            step_i+=1
             # relax a little! Only optimizing context signal!
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
             criterion_accuaracy -=0.1
+            
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
@@ -367,11 +379,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                     training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
-                    # if not config.one_batch_success: # uncomment these if needing to test accuracy after the one batch task inference on more batches. In reality once the model figures out a batch, it is accurate on all others. 
-                    #     config.one_batch_success = True
-                    # else:
-                        break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
-            step_i+=1
+                    break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             running_acc = 0.7 * running_acc + 0.3 * acc
         task_i +=1
 

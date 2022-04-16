@@ -12,4 +12,4 @@
 #SBATCH --job-name=clean
 #-------------------------------------------------------------------------------
 ## Run model 
-python higher_cognition.py  
+python refactor_cognitive_serialtasks.py  

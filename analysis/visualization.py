@@ -50,7 +50,13 @@ def plot_accuracies( config, training_log, testing_log):
             task_name = config.human_task_names[id]
             axes[0].text(training_log.switch_trialxxbatch[ti], 1.3, task_name, color= cmap.to_rgba(id) )
 
-    gs = np.stack(training_log.gradients)
+    lens = [len(tg) for tg in training_log.gradients]
+    m = min(lens)
+    training_log.gradients = [tg[:m] for tg in training_log.gradients]
+    try:
+        gs = np.stack(training_log.gradients)
+    except:
+        pass
 
     glabels =  ['inp_w', 'inp_b', 'rnn_w', 'rnn_b', 'out_w', 'out_b']
     ax = axes[num_tasks+0]

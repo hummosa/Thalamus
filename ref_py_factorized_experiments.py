@@ -14,14 +14,16 @@ experiments = ['shuffle_add', 'shuffle_mul', 'random_gates_add', 'random_gates_m
 experiments = [ 'rehearsal', 'random_gates',  'correlated_gates',]
 experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates_mul',]
 experiments += ['random_gates_only', 'random_gates_no_rehearsal', 'random_gates_rehearsal_no_train_to_criterion'] #  
+experiments = ['random_gates_rehearsal_no_train_to_criterion'] #  
+experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #  
 
 num_of_tasks_to_run = [14] 
-exp_sig = 'final_bu'
+exp_sig = 'prob_rehearsal'
 
-Seeds = range(0, 5)
-Var1 = range(0, 20, 5) #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
+Seeds = range(0, 9)
+Var1 = [0] #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
 Var2 = num_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
-Var3 = [1] # [(x/10) for x in range(0,1, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
+Var3 = [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 Var4 = [1] # [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 
 
@@ -51,10 +53,10 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 01:20:00"
+    , "#SBATCH -t 00:30:00"
     , "#SBATCH --gres=gpu:1"
     , "#SBATCH --constraint=high-capacity"
-    , "#SBATCH -p halassa"
+    # , "#SBATCH -p halassa"
     , "#SBATCH --mem={}G".format(64 if experiment_type == 'cognitive_observer' else 10)
     , '#SBATCH --output=./slurm/%j.out'
     , "#SBATCH --job-name={}_{}".format(jobi,exp_name)

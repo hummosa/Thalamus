@@ -73,13 +73,13 @@ class BaseConfig(object):
         self.criterion = 0.98
         self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
         self.criterion_DMfam = 0.86
-        
+        self.abort_rehearsal_if_accurate = True
         self.same_rnn = True
         self.no_shuffled_trials = 40000
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
         self.paradigm_alternate = False
-        self.one_batch_optimization = True  # Use only one batch to infer task rule input. 
+        self.one_batch_optimization = False  # Use only one batch to infer task rule input. 
 
         # RNN model
         self.input_size = 33
