@@ -248,6 +248,7 @@ class Shrew_task(TrialEnv):
         # By default, the trial is not ended
         info = {'new_trial': False}
         return self.ob_now, reward, done, info
+
 # test = True
 test = False
 # test_changepoint = True

@@ -7,7 +7,7 @@ from tqdm import tqdm, trange
 import gym
 import neurogym as ngym
 import matplotlib.pyplot as plt
-from utils import stats, get_trials_batch, get_performance, accuracy_metric
+from utils import stats, get_trials_batch, get_performance, accuracy_metric, test_in_training
 from Schizophrenia.tasks_coded_in_neurogym import NoiseyMean, Shrew_task
 import utils
 
@@ -50,15 +50,16 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
         criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
         
-        if config.abort_rehearsal_if_accurate:
-            if len(testing_log.accuracies)>0: 
-                if (testing_log.accuracies[-1][task_id]) > criterion_accuaracy:
-                    break
 
         running_frustration = 0
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
+            if config.abort_rehearsal_if_accurate and config.paradigm_sequential:
+                if len(testing_log.accuracies)>0: 
+                    if (i==0) and (testing_log.accuracies[-1][task_id]) > (criterion_accuaracy-0.05): # criterion with some leniency. Only check at the begning of this current task.
+                        print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
+                        break # stop training this task and jump to the next.
             context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
@@ -101,32 +102,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 )
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
 
-            # print statistics
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                ################################ test during training
-                net.eval()
-                # torch.set_grad_enabled(False)
-                testing_log.stamps.append(step_i)
-                testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-                # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
-
-                fix_perf, act_perf = get_performance(
-                    net,
-                    envs,
-                    context_ids=testing_context_ids,
-                    config = config,
-                    batch_size = config.test_num_trials,
-                    ) 
-                
-                testing_log.accuracies.append(act_perf)
-                testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-config.print_every_batches:]),axis=0))
-                            
-                # torch.set_grad_enabled(True)
-                net.train()
- 
-                #### End testing
+                test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
-            
             
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
@@ -135,6 +113,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
+                    test_in_training(config, net, testing_log, training_log, step_i, envs)
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
             running_acc = 0.7 * running_acc + 0.3 * acc
 
@@ -152,6 +131,30 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     testing_log.total_batches, training_log.total_batches = step_i, step_i
 
     return(testing_log, training_log, net)
+
+def test_in_training(config, net, testing_log, training_log, step_i, envs):
+    # torch.set_grad_enabled(False)
+    net.eval()
+    testing_log.stamps.append(step_i)
+    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
+                # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
+
+    fix_perf, act_perf = get_performance(
+                    net,
+                    envs,
+                    context_ids=testing_context_ids,
+                    config = config,
+                    batch_size = config.test_num_trials,
+                    ) 
+                
+    testing_log.accuracies.append(act_perf)
+    try:
+        gradients_past = min(step_i-training_log.start_optimizing_at, config.print_every_batches) # to avoid np.stack gradients from training and optimization. They might be of different lengths
+        testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
+    except:
+        pass
+                # torch.set_grad_enabled(True)
+    net.train()
 
 def build_env(config, envs, task_id, task_name):
     if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint', 'oddball1', 'oddball2', 'oddball3','oddball4',]:
@@ -341,32 +344,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
             # print statistics
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                ################################ test during training
-                net.eval()
-                # torch.set_grad_enabled(True)
-                with torch.no_grad():
-                    testing_log.stamps.append(step_i)
-                    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-                    # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
-
-                    fix_perf, act_perf = get_performance(
-                        net,
-                        envs,
-                        context_ids=testing_context_ids,
-                        config = config,
-                        batch_size = config.test_num_trials,
-                        ) 
-
-                    testing_log.accuracies.append(act_perf)
-                    gradients_past = min(step_i-training_log.start_optimizing_at, config.print_every_batches) # to avoid np.stack gradients from training and optimization. They might be of different lengths
-                    try:
-                        testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
-                    except:
-                        pass
-                # torch.set_grad_enabled(False)
-                net.train()
- 
-                #### End testing
+                test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
             # relax a little! Only optimizing context signal!
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam

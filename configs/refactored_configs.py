@@ -75,7 +75,7 @@ class BaseConfig(object):
         self.criterion_DMfam = 0.86
         self.abort_rehearsal_if_accurate = True
         self.same_rnn = True
-        self.no_shuffled_trials = 40000
+        self.no_shuffled_trials = 2700
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
         self.paradigm_alternate = False

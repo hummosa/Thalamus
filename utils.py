@@ -488,3 +488,25 @@ def test_model(model, test_inputs, test_outputs, step_i=0 ):
         plt.savefig(f'./files/cog_observer_sample_preds{step_i}.jpg')
         plt.close('')
     return (model_preds, model_acts, acc)
+
+
+def get_logs_and_files(data_folder, exp_name, file_sig='testing_log', search_strs=[]):
+    import os
+    lfiles = os.listdir(data_folder+f'{exp_name}/')
+    lfiles = [fn for fn in lfiles if fn.__contains__(file_sig)]
+    for sstr in search_strs:
+        lfiles = [fn for fn in lfiles if fn.__contains__(sstr)]
+
+    logs = []
+    for fi, fn in enumerate(lfiles):
+        try:
+            logs.append(np.load(data_folder+f'{exp_name}/' + fn, allow_pickle=True).item())
+        except:
+            print('some problem with ', fn)
+    return(logs, lfiles)
+
+def convert_train_to_test_idx(training_log, testing_log, training_idx):
+    test_idx = training_log.stamps[training_idx]
+    diff_arra = np.abs(np.array(testing_log.stamps) - test_idx)
+    test_t_idx = np.argmin(diff_arra)
+    return(test_t_idx)

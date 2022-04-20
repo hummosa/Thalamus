@@ -16,14 +16,16 @@ experiments = ['same_net', 'train_to_criterion', 'rehearsal', 'random_gates_mul'
 experiments += ['random_gates_only', 'random_gates_no_rehearsal', 'random_gates_rehearsal_no_train_to_criterion'] #  
 experiments = ['random_gates_rehearsal_no_train_to_criterion'] #  
 experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #  
+experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #  
+experiments = ['shuffle_mul', ]#'random_gates_mul',]
 
 num_of_tasks_to_run = [14] 
-exp_sig = 'prob_rehearsal'
+exp_sig = 'forgetting_measure_14_tasks_fixed_to_crit_equal_training'
 
 Seeds = range(0, 9)
 Var1 = [0] #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
 Var2 = num_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
-Var3 = [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
+Var3 = [0] # [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 Var4 = [1] # [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 
 

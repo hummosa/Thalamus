@@ -118,7 +118,7 @@ config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.sa
 # config.saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
 # config.gates_mean = args.var1
 # config.gates_std = args.var3
-config.rehearsal_base_prob = args.var3
+# config.rehearsal_base_prob = args.var3
 # config.gates_sparsity = args.var4
 config.gates_divider = 1.0
 config.gates_offset = 0.0
@@ -152,6 +152,7 @@ if config.paradigm_sequential:
         for sub_seq in task_sub_seqs: 
             task_seq+=sub_seq
         task_seq+=sub_seq # One additional final rehearsal, 
+        # task_seq+=sub_seq # yet another additional final rehearsal, 
     else:
         task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     if config.paradigm_alternate:
@@ -164,7 +165,7 @@ elif config.paradigm_shuffle:
     config.print_every_batches = 100
     config.no_shuffled_trials = 12000
 
-# add, at the end, the last 3 tasks from the unlearned pile:
+# add, at the end, one novel task from the unlearned pile:
 task_seq_sequential = []
 no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
 if no_of_tasks_left > 0: 
@@ -206,14 +207,14 @@ testing_log = SerialLogger(config=config)
 if config.load_saved_rnn1:
     net.load_state_dict(torch.load(config.saved_model_path))
     print('____ loading model from : ___ ', config.saved_model_path)
-else:
-    config.criterion_shuffle_paradigm = 0.90
+else: # if no pre-trained network proceed with the main training loop.
+    config.criterion_shuffle_paradigm = 1.90 # accuracy crit for shuffled paradigm to acheive so it matches the sequential paradigm.
     testing_log, training_log, net = train(config, net, task_seq, testing_log, training_log , step_i = 0 )
     config.criterion_shuffle_paradigm = 10 # raise it too high so it is no longer stopping training. 
        
     if not config.higher_order: # run the novel task sequential test
 
-        config.print_every_batches = 1
+        config.print_every_batches = 10
         config.train_to_criterion = True
         config.max_trials_per_task = 100000
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
