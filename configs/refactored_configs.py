@@ -80,7 +80,7 @@ class BaseConfig(object):
         self.paradigm_sequential = not self.paradigm_shuffle
         self.paradigm_alternate = False
         self.one_batch_optimization = False  # Use only one batch to infer task rule input. 
-
+        self.abort_rehearsal_if_accurate
         # RNN model
         self.input_size = 33
         self.hidden_size = 356
@@ -207,7 +207,7 @@ class SerialConfig(BaseConfig):
         self.use_additive_gates = False 
         
 class Schizophrenia_config(object):
-    def __init__(self, exp_type, args= []):
+    def __init__(self, exp_type=None, args= []):
         # system
         self.device = 'cuda'
         self.ROOT_DIR = os.getcwd()
@@ -218,7 +218,8 @@ class Schizophrenia_config(object):
         import neurogym as ngym
         # self.tasks = ngym.get_collection('yang19')
         # This is the golden sequence, hand tuned curriculum to finish in the least no of trials
-        exp_type = 'noisy_mean'
+        if exp_type is None:
+            exp_type = 'noisy_mean'
         if exp_type == 'shrew_task':
             self._tasks= [
                     'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'

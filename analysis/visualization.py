@@ -4,6 +4,12 @@ import torch.nn as nn
 from torch.nn import init
 from torch.nn import functional as F
 import matplotlib as mpl
+import matplotlib
+import sys, os
+root = os.getcwd()
+sys.path.append(root)
+sys.path.append('..')
+from utils import convert_train_to_test_idx
 mpl.rcParams['axes.spines.left'] = True
 mpl.rcParams['axes.spines.right'] = False
 mpl.rcParams['axes.spines.top'] = False
@@ -89,74 +95,112 @@ def plot_accuracies( config, training_log, testing_log):
 
 
     final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
-    plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{training_log.stamps[-1]}_{final_accuracy_average:1.2f}.jpg', dpi=300)
+    identifiers = 9 # f'{training_log.stamps[-1]}_{final_accuracy_average:1.2f}'
+    plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{identifiers}.jpg', dpi=300)
 
 
 def plot_credit_assignment_inference( config, training_log, testing_log):
-    if (config.optimize_bu): context_ids = training_log.bu_context_ids
-    if (config.optimize_td): context_ids =  training_log.td_context_ids
-    if (config.optimize_policy): context_ids =  training_log.md_context_ids
+    if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids
+    elif len(training_log.td_context_ids) > 0: context_ids =  training_log.td_context_ids
+    else: 
+        # len(training_log.md_context_ids) > 0: 
+        policy_context_id = np.ones([1,config.md_size])/config.md_size
+        context_ids = [policy_context_id.repeat(config.batch_size, 0)] * training_log.stamps[-1]
 
     
     mg = np.stack(training_log.md_grads)
-    mg = mg.mean(1) #(7957, 15)
+    mg = mg.mean(1) #(7957, 15) # average across batch
 
     x0, x1 = 0, training_log.stamps[-1]
-    fig, axes = plt.subplots(4,1, figsize=[12,6])
-    
-    ax = axes[0]
-    ax = sns.heatmap(mg.T, cmap='Reds', ax = ax)
-    ax.set_xticks(list(range(0, x1, 200)))
-    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
-    ax.set_xlim([x0, x1])
-    ax.set_ylabel('md grads')
-    # plt.colorbar(ax)
-
-    ax = axes[1]
-    tdci = np.stack(context_ids)
-    mtd = tdci.mean(1) # (7729, 15)
-    im = sns.heatmap(mtd.T, ax = ax)
-    ax.set_xticks(list(range(0, x1, 200)))
-    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
-    ax.set_xlim([x0, x1])
-    ax.set_ylabel('md activity')
-    # ax.colorbar()
-    # plt.colorbar(im) #, ax=ax.ravel().tolist())
-
     no_of_values = len(config.tasks)
     norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
     cmap_obj = mpl.cm.get_cmap('Set1') # tab20b tab20
     cmap = mpl.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
 
-    switches=  training_log.switch_trialxxbatch[1:] # earlier on I must have added zero as a switch trial 
-    ax.set_xlim([x0, x1])
+    switches=  training_log.switch_trialxxbatch[:] 
+    # switches=  training_log.switch_trialxxbatch[1:] # earlier on I must have added zero as a switch trial 
 
-    # ax.set_ylim([0,1])
-    for ri in range(len(switches)):
-        ax.scatter(switches[ri], (training_log.switch_task_id[ri]+0.5)*10, color =cmap.to_rgba(training_log.switch_task_id[ri]) ,  linewidth=4, )#alpha=0.2)
-        ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.9)
+    fig, axes = plt.subplots(4,1, figsize=[12,6], sharex = True)
 
-    ax = axes[2]
-    sample_rate = 1
-    hm = sns.heatmap(mg.T, cmap='Reds', ax = ax)
-    # ax.set_yticklabels([str(i) for i in labels])
-    ax.set_ylabel('MD neuron idx', fontsize=8)
+    ax = axes[0]
+    print(ax.get_position())
+    ax.set_position(mpl.transforms.Bbox([[0.125, 0.715], [.747, 0.880]]))
+
+    ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
+    for ri in range(len(switches)-1):
+        ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
+        id = training_log.switch_task_id[ri]
+        task_name = config.human_task_names[id]
+        ax.text(training_log.switch_trialxxbatch[ri], 1.0 + np.random.uniform(-0.1, 0.25), task_name, color= cmap.to_rgba(id) , fontsize=10)
+    ax.set_ylabel('current task accuracy')
     ax.set_xticks(list(range(0, x1, 200)))
     ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
-    # _=ax.set_xlabel('Trial (1000)', fontsize=8)
-    ax.set_title('MD grads')
-
-    ax = axes[3]
-    # ax.matshow(np.clip(mg_repeated[x0:x1].T, a_min = None, a_max= mg_repeated.max()/2))
-    # hm = sns.heatmap(mg[::sample_rate].T, cmap='Reds', ax = ax)
-    ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
-    for ri in range(len(switches)):
-        ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
     # ax.set_xlim([x0, x1])
     # for ri in range(len(training_log.switch_trialxxbatch)-1):
     #     ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
+    ax = axes[1]
+    t = 0
+    d = training_log.stamps[-1]
+    average_acc =[]
+    taa = []
+    for logi in range(config.num_of_tasks):
+        taa.append([test_acc[logi] for test_acc in testing_log.accuracies])
+    average_acc.append(np.stack(taa))
 
-    plt.savefig('./files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_{training_log.stamps[-1]}_{3.3:1.2f}.jpg', dpi=200)
+    testing_t = convert_train_to_test_idx(training_log, testing_log, t)
+    testing_e =convert_train_to_test_idx(training_log, testing_log, t+d)
+    ax.plot(testing_log.stamps[testing_t:testing_e], average_acc[0].mean(0)[testing_t:testing_e])
+    ax.axvspan(0, d, color='tab:blue', alpha=0.2)
+    ax.set_ylim([0,1])
+    ax.set_ylabel('all tasks with Rule accuracy')
+    # ax.set_title('With task rule input provided')
+    # print(ax.get_position())
+    ax.set_position(mpl.transforms.Bbox([[0.125, 0.519], [.747, 0.683]]))    
+
+    ax = axes[2]
+    tdci = np.stack(context_ids)
+    mtd = tdci.mean(1) # (7729, 15)
+    im = sns.heatmap(mtd.T, ax = ax)
+    ax.set_xlim([x0, x1])
+    ax.set_ylabel('md activity')
+    # ax.colorbar()
+    # plt.colorbar(im) #, ax=ax.ravel().tolist())
+
+
+    ax.set_xlim([x0, x1])
+
+    # ax.set_ylim([0,1])
+    for ri in range(len(switches)-1):
+        # print(ri)
+        ax.scatter(switches[ri], (training_log.switch_task_id[ri]+0.5), color =cmap.to_rgba(training_log.switch_task_id[ri]) ,  linewidth=4, )#alpha=0.2)
+        ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.9)
+
+    ax = axes[3]
+    ax = sns.heatmap(mg.T, cmap='Reds', ax = ax, vmax=mg.max()/3)
+    ax.set_xticks(list(range(0, x1, 200)))
+    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
+    ax.set_xlim([x0, x1])
+    ax.set_ylabel('MD grads')
+    ax.set_xlabel('Trials (100)')
+    # plt.colorbar(ax)
+
+    # sample_rate = 1
+    # hm = sns.heatmap(mg.T, cmap='Reds', ax = ax)
+    # # ax.set_yticklabels([str(i) for i in labels])
+    # ax.set_ylabel('MD neuron idx', fontsize=8)
+    # ax.set_xticks(list(range(0, x1, 200)))
+    # ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
+    # # _=ax.set_xlabel('Trial (1000)', fontsize=8)
+    # ax.set_title('MD grads')
+
+    # try:
+    #     plt.savefig('./files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_bottom_up_optimizing.jpg', dpi=200)
+    # except:
+    #     # plt.savefig('./../files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_bottom_up_optimizing.jpg', dpi=200)
+    #     plt.savefig('./../files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_bu_optimizing_many_batches.jpg', dpi=300)
+        # plt.savefig('./../files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_policy_optimizing.jpg', dpi=200)
+    identifiers = 9
+    plt.savefig('./files/'+ config.exp_name+f'/CAI_summary_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 
 
 def get_activity(config, net, env, num_trial=1000):

@@ -201,7 +201,9 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
 
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-    lr=config.lr*100)
+    lr=config.lr*1000)
+    # bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*30000)
+
     
     td_training_params = list()
     print('cognitive network optimized parameters')
