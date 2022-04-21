@@ -182,7 +182,7 @@ class Shrew_task(TrialEnv):
         # Sample observation for the next trial
         cues = np.zeros(shape=(self.total_cues) ) 
         if self.no_of_coherent_cues is None:
-            sampled_no_of_coherent_cues = rng.integers(self.total_cues//2, self.total_cues )
+            sampled_no_of_coherent_cues = rng.integers((self.total_cues//2)+1, self.total_cues )
         else:
             sampled_no_of_coherent_cues = self.no_of_coherent_cues
         # print(sampled_no_of_coherent_cues)
@@ -234,7 +234,8 @@ class Shrew_task(TrialEnv):
         trial['stimulus'] = stimulus
         trial['cues'] = cues
         trial['ground_truth'] = groundtruth
-        
+        trial['difficulty'] = sampled_no_of_coherent_cues/self.total_cues
+
         return trial
     
     def _step(self, action):
@@ -248,6 +249,53 @@ class Shrew_task(TrialEnv):
         # By default, the trial is not ended
         info = {'new_trial': False}
         return self.ob_now, reward, done, info
+
+class Shrew_task_hierarchical(TrialEnv):
+    def __init__(self, dt=10, ):
+        super().__init__(dt=dt)  # dt is passed to base task
+        
+        self.env_context1 = Shrew_task(dt =10, attend_to='either', context=1, no_of_coherent_cues=None)
+        self.env_context2 = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
+
+        self.total_cues = 10
+
+        self.history_of_contexts = []
+        block_duration_low, block_duraion_high = 10, 20
+        self.switches = rng.integers(block_duration_low,block_duraion_high, 1000) # sample 100 block durations uniformly between low and high values.
+        self.current_context = 0
+        self.current_idx = 0
+
+        self.observation_space = ngym.spaces.Box(
+            low=0., high=1., shape=(6,), name={'stimulus': [0,1,2,3], 'cues': [4,5]})
+        name = { 'choice': [0,1,2,3]}
+        self.action_space = ngym.spaces.Discrete(1, name=name) # still self.action_space.shape returns shape () and that does not allow adding gt in R3
+
+
+    def _new_trial(self):
+        # Setting time periods for this trial
+        periods = ['cues', 'delay', 'stimulus', 'decision']
+        self.add_period(periods)
+
+        # if current trial idx is in switches, switch context and increment idx
+        if self.current_idx in self.switches: self.current_context = 1-self.current_context
+        context = self.current_context
+        if context ==0:
+            trial = self.env_context1.new_trial()
+        else:
+            trial = self.env_context2.new_trial()
+        stimulus = trial['stimulus']
+        cues = trial['cues'] 
+        groundtruth = trial['ground_truth']
+            
+        self.add_ob(stimulus, period='stimulus', where='stimulus')
+        self.add_ob(cues, period='cues', where='cues')
+        self.set_groundtruth( groundtruth, period='decision', where='choice')  
+
+        trial['context'] = self.current_context
+        self.current_idx +=1 
+        
+        return trial
+    
 
 # test = True
 test = False

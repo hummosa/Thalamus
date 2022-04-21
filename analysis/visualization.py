@@ -133,8 +133,7 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
         task_name = config.human_task_names[id]
         ax.text(training_log.switch_trialxxbatch[ri], 1.0 + np.random.uniform(-0.1, 0.25), task_name, color= cmap.to_rgba(id) , fontsize=10)
     ax.set_ylabel('current task accuracy')
-    ax.set_xticks(list(range(0, x1, 200)))
-    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
+    
     # ax.set_xlim([x0, x1])
     # for ri in range(len(training_log.switch_trialxxbatch)-1):
     #     ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
@@ -177,8 +176,16 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
 
     ax = axes[3]
     ax = sns.heatmap(mg.T, cmap='Reds', ax = ax, vmax=mg.max()/3)
-    ax.set_xticks(list(range(0, x1, 200)))
-    ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
+    # ax.set_xticks(list(range(0, x1, 200)))
+    # # ax.set_xticklabels([str(i) for i in list(range(0, x1, 200))])
+    # for index, label in enumerate(bar_plot.get_xticklabels()):
+    #     if index % 2 == 0:
+    #     label.set_visible(True)
+    #     else:
+    #     label.set_visible(False)
+    xticks = list(range(0, x1, int(ax.get_xlim()[1]//4)))
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([str(i) for i in xticks])
     ax.set_xlim([x0, x1])
     ax.set_ylabel('MD grads')
     ax.set_xlabel('Trials (100)')

@@ -8,7 +8,7 @@ import gym
 import neurogym as ngym
 import matplotlib.pyplot as plt
 from utils import stats, get_trials_batch, get_performance, accuracy_metric, test_in_training
-from Schizophrenia.tasks_coded_in_neurogym import NoiseyMean, Shrew_task
+from Schizophrenia.tasks_coded_in_neurogym import *
 import utils
 
 def criterion(output, labels, use_loss='nll'):    # criterion & optimizer
@@ -177,9 +177,11 @@ def build_env(config, envs, task_id, task_name):
             envs[task_id] = Shrew_task(dt =10, attend_to='vision')
                
         if task_name == 'shrew_task_either':
-            envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=9)
+            envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=None)
         if task_name == 'shrew_task_either2':
-            envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=9)
+            envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
+        if task_name == 'st_hierarchical':
+            envs[task_id] = Shrew_task_hierarchical()
 
     else: # assume a neurogym yang19 task:
         envs[task_id] = gym.make(task_name, **config.env_kwargs)
@@ -201,7 +203,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
 
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-    lr=config.lr*1000)
+    lr=config.lr*100)
     # bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*30000)
 
     
@@ -267,7 +269,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 # context_id[:, torch.argmax(md_context_id, axis=1)] = 1. # Hard max
                 
                 bu_context_id = net.rnn.md_context_id    
-                bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) 
+                bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
                 bu_context_id = bu_context_id.repeat([config.batch_size, 1])
                 bu_context_id = bu_context_id.to(config.device)
                 bu_context_id.requires_grad_()

@@ -112,7 +112,7 @@ if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean':
     config.switches = 12
     config.max_trials_per_task = 10000
     config.paradigm_alternate = True
-    config.train_to_criterion = False
+    config.train_to_criterion = True
     config.abort_rehearsal_if_accurate = False
     config.one_batch_optimization = False
 ############################################
@@ -122,17 +122,13 @@ config.num_of_tasks = args.num_of_tasks
 config.saved_model_sig = f'seed{args.seed}_paradigm_{"shuf" if config.paradigm_shuffle else "seq"}_{"mul" if config.use_multiplicative_gates else "add"}_tasks_{config.num_of_tasks}_'
 config.exp_signature = config.saved_model_sig +  config.exp_signature #+ f'_{"corr" if config.load_gates_corr else "nocorr"}_{"co" if config.use_cognitive_observer else "noc"}_{"reh" if config.use_rehearsal else "noreh"}_{"tc" if config.train_to_criterion else "nc"}_{"mul" if config.use_multiplicative_gates else "add"}_{"gates" if config.use_gates else "nog"}'
 config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.saved_model_sig}.torch'
-# config.saved_model_path = './data/'+ f'saved_model_{config.saved_model_sig}.torch'
-# config.gates_mean = args.var1
-# config.gates_std = args.var3
-# config.rehearsal_base_prob = args.var3
-# config.gates_sparsity = args.var4
-config.gates_divider = 1.0
-config.gates_offset = 0.0
+
+config.gates_divider = 2.0
+config.gates_offset = 0.10
 
 config.train_gates = False
-config.save_model = True
 config.save_model = False
+# config.save_model = True
 
 config.optimize_policy  = False
 config.optimize_td      = False
@@ -140,7 +136,6 @@ config.optimize_bu      = True
 
 config.higher_order = not config.save_model
 if config.higher_order:
-    config.gates_divider = 1.2
     config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###

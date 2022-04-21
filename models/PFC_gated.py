@@ -53,7 +53,7 @@ class CTRNN_MD(nn.Module):
             # Gaussian with sparsity gates
             self.init_mul_gates = torch.empty((config.md_size, config.hidden_size, )) 
             sparse_with_mean(self.init_mul_gates, config.gates_sparsity, config.gates_mean, config.gates_std)
-            self.init_mul_gates = torch.nn.functional.relu(self.init_mul_gates)
+            self.init_mul_gates = torch.nn.functional.relu(self.init_mul_gates) #* config.gates_divider + config.gates_offset
             self.register_parameter(name='mul_gates', param=torch.nn.Parameter(self.init_mul_gates))
             # import pdb; pdb.set_trace()
         if self.use_additive_gates:
