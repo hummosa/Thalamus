@@ -170,15 +170,15 @@ def build_env(config, envs, task_id, task_name):
             }
         param= params[task_name]
         envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
-    elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_either',  'shrew_task_either2']:
+    elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1',  'shrew_task_cxt2', 'st_hierarchical']:
         if task_name == 'shrew_task_audition':
             envs[task_id] = Shrew_task(dt =10, attend_to='audition')
         if task_name == 'shrew_task_vision':
             envs[task_id] = Shrew_task(dt =10, attend_to='vision')
                
-        if task_name == 'shrew_task_either':
+        if task_name == 'shrew_task_cxt1':
             envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=None)
-        if task_name == 'shrew_task_either2':
+        if task_name == 'shrew_task_cxt2':
             envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
         if task_name == 'st_hierarchical':
             envs[task_id] = Shrew_task_hierarchical()
@@ -222,8 +222,10 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
 
     # initialize buffer
-    config.horizon =50
+    config.horizon =150
     buffer_acts = []
+    buffer_grads = []
+    buffer_grads_targets = []
     buffer_task_ids = []
     buffer_labels = []
     buffer_accuracies = []
@@ -244,25 +246,11 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
         config.one_batch_success = False
         for i in training_bar:
 
-            if config.optimize_td:
-                #########Gather cognitive inputs ###############
-                if len(buffer_acts) > config.horizon-1:
-                    # expanded_previous_acc = np.repeat(np.array(buffer_accuracies)[..., np.newaxis], 10, axis=-1)   #Expanded merely to emphasize their signal over the numerous acts
-                    expanded_previous_acc = np.array(buffer_accuracies).reshape([-1, 1, 1]).repeat(config.batch_size, 1).repeat(10, 2) # expand batch dim, but alos repeat to emphsaize them
-                    gathered_inputs = np.concatenate([buffer_acts, buffer_labels, expanded_previous_acc], axis=-1) #shape  7100 100 266
-                    # task_ids_repeated = buffer_task_ids[..., np.newaxis].repeat(100,1)
-                    
-                    training_inputs = gathered_inputs
-                    # training_outputs= task_ids_repeated
-                    ins =  torch.tensor(training_inputs, device=config.device) # (input_length, 100, 266)
-                    # outs = torch.tensor(training_outputs, device=config.device)
-                    #################################################
-                    cpred, _, = cog_net(ins)
-                    td_context_id  = F.gumbel_softmax(cpred[-1], dim = 1) # will give 15 one_hot.
-                else:
-                    td_context_id = torch.ones([config.batch_size,config.md_size])/config.md_size    
-                    # td_context_id = td_context_id.repeat([config.batch_size, 1])
-                training_log.td_context_ids.append(td_context_id.detach().cpu().numpy())
+            if config.one_batch_optimization and not config.one_batch_success:
+                if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
+                    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            else:
+                inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
 
             if config.optimize_bu:
                 # context_id = torch.zeros([config.batch_size, config.md_size])
@@ -275,17 +263,46 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 bu_context_id.requires_grad_()
                 training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
                 
+            config.loop_md_error = 5
+            if config.loop_md_error:
+                context_id_before_loop = net.rnn.md_context_id.detach()
+                buffer_grads.append(context_id_before_loop.detach().cpu().numpy())
+                for _ in range(config.loop_md_error):
+                    md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels)
+                context_id_after_loop = net.rnn.md_context_id.detach()
+                buffer_grads_targets.append(context_id_after_loop.detach().cpu().numpy())
+
+            if config.optimize_td:
+                #########Gather cognitive inputs ###############
+                if len(buffer_acts) > config.horizon-1:
+                    # expanded_previous_acc = np.repeat(np.array(buffer_accuracies)[..., np.newaxis], 10, axis=-1)   #Expanded merely to emphasize their signal over the numerous acts
+                    expanded_previous_acc = np.array(buffer_accuracies).reshape([-1, 1, 1]).repeat(config.batch_size, axis=1).repeat(10, axis=2) # expand batch dim, but also repeat to emphsaize them
+                    # gathered_inputs = np.concatenate([buffer_acts, buffer_labels, expanded_previous_acc], axis=-1) #shape  7100 100 266
+                    buffer_grads_tensor= np.stack(buffer_grads).repeat(config.batch_size, axis=1)
+                    gathered_inputs = np.concatenate([buffer_acts, buffer_grads_tensor[1:], expanded_previous_acc], axis=-1) #shape  7100 100 266
+                    # task_ids_repeated = buffer_task_ids[..., np.newaxis].repeat(100,1)
+                    
+                    training_inputs = gathered_inputs
+                    # training_outputs= task_ids_repeated
+                    ins =  torch.tensor(training_inputs, device=config.device) # (input_length, 100, 266)
+                    # outs = torch.tensor(training_outputs, device=config.device)
+                    #################################################
+                    cpred, _, = cog_net(ins)
+                    buffer_grads_targets_tensor= np.stack(buffer_grads_targets[1:]).repeat(config.batch_size, axis=1)
+                    cognitive_loss = F.mse_loss(cpred, torch.from_numpy(buffer_grads_targets_tensor).to(config.device))
+                    # td_context_id  = F.gumbel_softmax(cpred[-1], dim = 1) # will give 15 one_hot.
+                    td_context_id  = F.softmax(cpred[-1], dim = 1)  
+                else:
+                    td_context_id = torch.ones([config.batch_size,config.md_size])/config.md_size  
+                    cognitive_loss = None  
+                    # td_context_id = td_context_id.repeat([config.batch_size, 1])
+                training_log.td_context_ids.append(td_context_id.detach().cpu().numpy())
+
             if config.optimize_policy:
                 # create non-informative uniform context_ID
                 policy_context_id = torch.ones([1,config.md_size])/config.md_size    
                 policy_context_id = policy_context_id.repeat([config.batch_size, 1])
 
-            if config.one_batch_optimization and not config.one_batch_success:
-                if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
-                    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-            else:
-                inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-            
             # combine context signals.
             if config.optimize_policy: context_id = policy_context_id 
             if (config.optimize_bu): context_id = bu_context_id
@@ -302,14 +319,17 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
             buffer_accuracies.append(acc)
             buffer_task_ids.append(task_id)
-            if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0) 
+            if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0);buffer_grads_targets.pop(0);buffer_grads.pop(0)
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             if config.optimize_bu: bu_optimizer.zero_grad()
             if config.optimize_td: td_optimizer.zero_grad()
             if config.optimize_policy: policy_optimizer.zero_grad()
             
-            loss = criterion(outputs, labels)
+            if cognitive_loss:
+                loss = criterion(outputs, labels) + cognitive_loss
+            else:
+                loss = criterion(outputs, labels)
             loss.backward()
             # if step_i % config.print_every_batches == (config.print_every_batches - 1):
                 # plot_context_id(config, td_context_id, bu_context_id, task_id)
@@ -317,14 +337,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 training_log.md_grads.append(context_id.grad.data.cpu().numpy())
             else: 
                 assert (not (config.use_multiplicative_gates or config.use_additive_gates) ), 'context_ID grad is None'
-                
 
-            if False: # handGD
-                    caia_lr = 0.001
-                    # grad_sum = context_id.grad.data.sum(0)
-                    grad_sum = context_id.grad.data.sum(0)
-                    md_context_id = md_context_id.to(config.device) - caia_lr* grad_sum# md_grads=(context_id.grad.data.cpu().numpy()) # shape [batch_size, 15]
-                    # md_context_id = F.one_hot(torch.argmax(md_context_id, dim=1), md_context_id.shape[1])
             if config.optimize_bu:      bu_optimizer.step()
             if config.optimize_td:      td_optimizer.step()
             if config.optimize_policy:  policy_optimizer.step()
@@ -365,10 +378,27 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             running_acc = 0.7 * running_acc + 0.3 * acc
         task_i +=1
 
+
     training_log.optimizing_total_batches, testing_log.optimizing_total_batches = step_i, step_i
 
     return(testing_log, training_log, net)
 
+def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels):
+    bu_context_id = net.rnn.md_context_id    
+    bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
+    bu_context_id = bu_context_id.repeat([config.batch_size, 1])
+    bu_context_id = bu_context_id.to(config.device)
+    bu_context_id.requires_grad_()
+    training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
+
+    context_id = bu_context_id
+    context_id.requires_grad_().retain_grad() #shape batch_size x Md_size
+                        
+    outputs, rnn_activity = net(inputs, sub_id=context_id)
+    bu_optimizer.zero_grad()
+    loss = criterion(outputs, labels)
+    loss.backward()
+    bu_optimizer.step()
 
 def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
     fig, axes = plt.subplots(1,3)

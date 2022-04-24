@@ -306,7 +306,7 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
     action_accuracies = defaultdict()
     for (context_id, env) in (zip(context_ids, envs)):
         # import pdb; pdb.set_trace()
-        inputs, labels = get_trials_batch(env, batch_size, config)
+        inputs, labels = get_trials_batch(env, batch_size, config, test_batch=True)
         if config.use_lstm:
             action_pred, _ = net(inputs, update_md= False) # shape [500, 10, 17]
         else:
@@ -371,11 +371,10 @@ def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
     # calculate the response to oddballs vs changepoints. 
 
 
-def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks=False):
+def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks=False, test_batch=False):
     # check if only one env or several and ensure it is a list either way.
     if type(envs) is not type([]):
         envs = [envs]
-        
     # fetch and batch data
     obs, gts, dts = [], [], []
     for bi in range(batch_size):
@@ -398,16 +397,16 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
     for o in range(len(gts)):
         while len(gts[o]) < max_len:
             gts[o]= np.insert(gts[o], 0, gts[o][0], axis=0)
-
-
     obs = np.stack(obs) # shape (batch_size, 32, 33)
-    
     gts = np.stack(gts) # shape (batch_size, 32)
-
     # numpy -> torch
     inputs = torch.from_numpy(obs).type(torch.float).to(config.device)
     labels = torch.from_numpy(gts).type(torch.float).to(config.device)
-
+    # if shrew:
+    if hasattr(env, 'update_context') and not test_batch:
+        env.update_context()
+        # print(f'remaining: \t {env.trials_remaining}\t cxt: {env.current_context} ')
+        # print(env.switches)
     # index -> one-hot vector
     if labels.shape[-1] > 1:
         labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float()  # Had to make it into integers for one_hot then turn it back to float.

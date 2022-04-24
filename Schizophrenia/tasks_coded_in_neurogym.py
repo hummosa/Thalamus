@@ -10,7 +10,7 @@ import sys; sys.path.insert(0, '.')
 from utils import stats
 
 class NoiseyMean(TrialEnv):
-    def __init__(self, mean_noise= 0.1, mean_drift = 0, odd_balls_prob = 0.0, change_point_prob = 0.0, safe_trials = 5):
+    def __init__(self, mean_noise= 0.1, mean_drift = 0, odd_balls_prob = 0.0, change_point_prob = 0.0, trials_remaining = 5):
         super().__init__(dt=1)
 
 
@@ -33,7 +33,7 @@ class NoiseyMean(TrialEnv):
         self.odd_balls_prob =odd_balls_prob 
         self.mean_noise= mean_noise
         self.change_point_prob = change_point_prob
-        self.safe_trials = safe_trials
+        self.trials_remaining = trials_remaining
         self.hazzard_rate = max(odd_balls_prob, change_point_prob)
 
     def _new_trial_old(self):
@@ -48,7 +48,7 @@ class NoiseyMean(TrialEnv):
         outcomes, means = [], []
         oddballs = np.zeros(self.trial_len)
         changepoints = np.zeros(self.trial_len)
-        s = self.safe_trials
+        s = self.trials_remaining
         for i in range(self.trial_len):
             self.outcome_now = rng.normal(self.mean_now, self.mean_noise)
             while((self.outcome_now < self.observation_space.__getattribute__('low')) or (self.outcome_now > self.observation_space.__getattribute__('high'))):
@@ -65,7 +65,7 @@ class NoiseyMean(TrialEnv):
                     while (not far_enough):
                         self.outcome_now = self.observation_space.sample()
                         far_enough = abs(self.outcome_now - self.mean_now) > self.far_definition
-                    s = self.safe_trials
+                    s = self.trials_remaining
                 
                 if rng.uniform() < self.change_point_prob:
                     changepoints[i] = 1.0
@@ -74,7 +74,7 @@ class NoiseyMean(TrialEnv):
                         mean_next = self.latent_space.sample()
                         far_enough = abs(mean_next - self.mean_now) > self.far_definition
                     self.mean_now = mean_next
-                    s = self.safe_trials
+                    s = self.trials_remaining
             else:
                 s = s-1
             outcomes.append(self.outcome_now)
@@ -253,33 +253,43 @@ class Shrew_task(TrialEnv):
 class Shrew_task_hierarchical(TrialEnv):
     def __init__(self, dt=10, ):
         super().__init__(dt=dt)  # dt is passed to base task
-        
+        self.timing = {'cues': 200, 'delay': 50, 'stimulus': 30, 'decision': 20}
+
         self.env_context1 = Shrew_task(dt =10, attend_to='either', context=1, no_of_coherent_cues=None)
         self.env_context2 = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
 
         self.total_cues = 10
 
         self.history_of_contexts = []
-        block_duration_low, block_duraion_high = 10, 20
-        self.switches = rng.integers(block_duration_low,block_duraion_high, 1000) # sample 100 block durations uniformly between low and high values.
+        self.block_duration_low, self.block_duraion_high = 300, 400
+        # self.switches = rng.integers(block_duration_low,block_duraion_high, 10000) # sample 100 block durations uniformly between low and high values.
+        self.trials_remaining = rng.integers(self.block_duration_low,self.block_duraion_high)
         self.current_context = 0
         self.current_idx = 0
-
+        self.switches = []
+        self.context_ids = []
+        
         self.observation_space = ngym.spaces.Box(
             low=0., high=1., shape=(6,), name={'stimulus': [0,1,2,3], 'cues': [4,5]})
         name = { 'choice': [0,1,2,3]}
         self.action_space = ngym.spaces.Discrete(1, name=name) # still self.action_space.shape returns shape () and that does not allow adding gt in R3
 
+    def update_context(self):
+        # decrement trials remaining in block and switch to the next block. 
+        self.context_ids.append(self.current_context)
+        self.current_idx +=1 
+        self.trials_remaining +=-1
+        if self.trials_remaining == 0:
+            self.trials_remaining = rng.integers(self.block_duration_low,self.block_duraion_high)
+            self.current_context = 1-self.current_context
+            self.switches.append(self.current_idx)
 
     def _new_trial(self):
         # Setting time periods for this trial
         periods = ['cues', 'delay', 'stimulus', 'decision']
         self.add_period(periods)
 
-        # if current trial idx is in switches, switch context and increment idx
-        if self.current_idx in self.switches: self.current_context = 1-self.current_context
-        context = self.current_context
-        if context ==0:
+        if self.current_context ==0:
             trial = self.env_context1.new_trial()
         else:
             trial = self.env_context2.new_trial()
@@ -289,10 +299,9 @@ class Shrew_task_hierarchical(TrialEnv):
             
         self.add_ob(stimulus, period='stimulus', where='stimulus')
         self.add_ob(cues, period='cues', where='cues')
-        self.set_groundtruth( groundtruth, period='decision', where='choice')  
+        self.set_groundtruth( np.argmax(groundtruth), period='decision', where='choice')  
 
         trial['context'] = self.current_context
-        self.current_idx +=1 
         
         return trial
     
@@ -321,7 +330,7 @@ if test_changepoint:
         'changepoint':      [0.05, 0.0, 0.0 , 0.1]
     }
     param= params['oddball']
-    env =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
+    env =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], trials_remaining = 5)
 
     t = env.new_trial()
     ob_size = env.observation_space.shape[0]

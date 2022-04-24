@@ -222,7 +222,8 @@ class Schizophrenia_config(object):
             exp_type = 'noisy_mean'
         if exp_type == 'shrew_task':
             self._tasks= [
-                    'shrew_task_either', 'shrew_task_either2', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_either'
+                    'shrew_task_cxt1', 'shrew_task_cxt2',# 'st_hierarchical', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1'
+                    # 'st_hierarchical',# 'shrew_task_cxt1', 'shrew_task_cxt2',  #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1'
                     ] 
         elif exp_type == 'noisy_mean':
             self._tasks= ['noisy_mean',  'oddball', 'changepoint','drifting_mean']

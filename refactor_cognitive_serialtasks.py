@@ -56,7 +56,7 @@ my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', typ
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 # my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=2, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.2, nargs='?', type=float, help='gates std')
@@ -109,10 +109,10 @@ if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean':
     args.num_of_tasks = len(config.tasks)
     config.use_additive_gates = False
     config.use_multiplicative_gates = True
-    config.switches = 12
-    config.max_trials_per_task = 10000
+    config.switches = 20
+    config.max_trials_per_task = int(40 * config.batch_size)
     config.paradigm_alternate = True
-    config.train_to_criterion = True
+    config.train_to_criterion = False
     config.abort_rehearsal_if_accurate = False
     config.one_batch_optimization = False
 ############################################
@@ -131,11 +131,13 @@ config.save_model = False
 # config.save_model = True
 
 config.optimize_policy  = False
-config.optimize_td      = False
-config.optimize_bu      = True
+config.optimize_td      = True
+config.optimize_bu      = False
+config.cog_net_hidden_size = 100
 
 config.higher_order = not config.save_model
 if config.higher_order:
+    config.train_to_criterion = False
     config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
@@ -196,9 +198,9 @@ for _ in range(config.random_rehearsals):
     random.shuffle(sub_seq)
     task_seq_random+=sub_seq
 task_seq_optimize = []
-for _ in range(5):
+for _ in range(500):
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
-    random.shuffle(sub_seq)
+    if not config.paradigm_alternate: random.shuffle(sub_seq)
     task_seq_optimize+=sub_seq
 
 # main loop
@@ -233,7 +235,8 @@ if config.save_model:
 
 
 if config.higher_order:
-    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.output_size, hidden_size=1, output_size = config.md_size)
+    # cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.output_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
+    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.md_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
     cog_net.to(config.device)
 
     step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
@@ -243,7 +246,7 @@ if config.higher_order:
         config.print_every_batches = 10
         config.train_to_criterion = True
         config.max_trials_per_task = 80000
-    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize[:20], testing_log, training_log, step_i = step_i )
+    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize, testing_log, training_log, step_i = step_i )
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
