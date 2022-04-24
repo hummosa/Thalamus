@@ -49,12 +49,12 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='shrew', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
-# my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
@@ -107,8 +107,8 @@ if args.experiment_type == 'shuffle_add':
 if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean': 
     config = Schizophrenia_config(args.experiment_type)
     args.num_of_tasks = len(config.tasks)
-    config.use_additive_gates = False
-    config.use_multiplicative_gates = True
+    config.use_additive_gates = True
+    config.use_multiplicative_gates = False
     config.switches = 20
     config.max_trials_per_task = int(40 * config.batch_size)
     config.paradigm_alternate = True
@@ -128,16 +128,16 @@ config.gates_offset = 0.10
 
 config.train_gates = False
 config.save_model = False
-# config.save_model = True
+config.save_model = True
 
 config.optimize_policy  = False
-config.optimize_td      = True
-config.optimize_bu      = False
+config.optimize_td      = False
+config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
 config.higher_order = not config.save_model
 if config.higher_order:
-    config.train_to_criterion = False
+    config.train_to_criterion = True
     config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###

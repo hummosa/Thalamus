@@ -33,7 +33,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         else:
             print('exluding: ', name)
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
-
+    bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
+        lr=config.lr*10)
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
@@ -54,19 +55,33 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         running_frustration = 0
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
+        
+        # create non-informative uniform context_ID
+        context_id = torch.ones([1,config.md_size])/config.md_size    
+        context_id = context_id.repeat([config.batch_size, 1])
+
         for i in training_bar:
             if config.abort_rehearsal_if_accurate and config.paradigm_sequential:
                 if len(testing_log.accuracies)>0: 
                     if (i==0) and (testing_log.accuracies[-1][task_id]) > (criterion_accuaracy-0.05): # criterion with some leniency. Only check at the begning of this current task.
                         print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
                         break # stop training this task and jump to the next.
-            context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
+            # context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
             labels.refine_names('timestep', 'batch', 'output_dim')
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
+            
+            # if acc is < running_acc by 0.2. run optim and get a new context_id
+            if (acc - running_acc) > 0.2: # assume some novel something happened
+                config.loop_md_error = 20
+                for _ in range(config.loop_md_error):
+                    md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels)
+                context_id_after_loop = net.rnn.md_context_id.detach()
+                context_id = context_id_after_loop
+                
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
@@ -108,7 +123,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
-                running_acc = 0.
+                # running_acc = 0.
                 if training_log.trials_to_crit[-1] == 0: # if no trial to crit recorded previously
                     training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
@@ -203,7 +218,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
 
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-    lr=config.lr*100)
+    lr=config.lr*50)
     # bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*30000)
 
     
