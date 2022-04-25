@@ -1,13 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 use_PFCMD = False
-# system
 import os
 import sys
 
-from sqlalchemy import false
-
-# from torch._C import T
 root = os.getcwd()
 sys.path.append(root)
 sys.path.append('..')
@@ -58,7 +54,7 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=1, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.2, nargs='?', type=float, help='gates std')
@@ -182,7 +178,7 @@ if no_of_tasks_left > 0:
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     # learn one novel task then rehearse previously learned + novel task
     task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
-    task_seq_sequential = sub_seq + sub_seq + [config.tasks_id_name[novel_task_id]] 
+    task_seq_sequential = sub_seq * 15  #+ [config.tasks_id_name[novel_task_id]] + sub_seq 
 
 # if config.use_rehearsal:
 #     to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)
@@ -256,8 +252,6 @@ if config.higher_order:
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/config_{config.exp_signature}.npy', config, allow_pickle=True)
-if use_PFCMD:
-    np.save('./files/'+ config.exp_name+f'/md_activities_{config.exp_signature}.npy', net.md_activities, allow_pickle=True)
 print('testing logs saved to : '+ './files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy')
 
 
@@ -268,6 +262,7 @@ viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
 
 if config.higher_order and not config.optimize_policy:
     viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+viz.plot_long_term_cluster_discovery(config, training_log, testing_log)
 
 # TODO Follow up on the gates_divider and its potential effects on TU BU or policy. 
 # TODO Review 

@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from analysis.visualization import plot_cluster_discovery
+from analysis.visualization import plot_cluster_discovery, plot_long_term_cluster_discovery
 from logger.logger import SerialLogger
 from tqdm import tqdm, trange
 import gym
@@ -46,6 +46,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     for task_id, task_name in config.tasks_id_name:
         build_env(config, envs, task_id, task_name)
     running_acc = 0 # just to init
+    bu_running_acc = 0
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
@@ -58,7 +59,6 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
         criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
         
-
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
@@ -79,17 +79,22 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
             bubuffer, bu_accs = [], []
             if (running_acc-acc) > 0.15: # assume some novel something happened
-                config.loop_md_error = 50
+                config.loop_md_error = 400
                 context_id_before_loop = net.rnn.md_context_id.detach().clone()
                 for _ in range(config.loop_md_error):
                     bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
                     bu_acc = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
                     bu_accs.append(bu_acc)
+                    bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
+                    if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
+                        bu_running_acc = 0.5
+                        break
                 context_id_after_loop = net.rnn.md_context_id.detach()
                 context_id = F.softmax(context_id_after_loop, dim=1)
                 print(f'md adjusted from {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-context_id_before_loop).detach().cpu().numpy()}')
-            if len(bubuffer) > 0:
-                plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+            # if len(bubuffer) > 0:
+            #     plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+            #     plot_long_term_cluster_discovery(config, training_log, testing_log)
             training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
@@ -153,7 +158,10 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.sample_label = labels[:,0,:].detach().cpu().numpy().T
         training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
     testing_log.total_batches, training_log.total_batches = step_i, step_i
-
+    try:
+        plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+    except:
+        pass
     return(testing_log, training_log, net)
 
 def test_in_training(config, net, testing_log, training_log, step_i, envs):
