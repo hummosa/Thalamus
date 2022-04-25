@@ -73,7 +73,7 @@ class BaseConfig(object):
         self.criterion = 0.98
         self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
         self.criterion_DMfam = 0.86
-        self.abort_rehearsal_if_accurate = True
+        self.abort_rehearsal_if_accurate = False
         self.same_rnn = True
         self.no_shuffled_trials = 2700
         self.paradigm_shuffle = False

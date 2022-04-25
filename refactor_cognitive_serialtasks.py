@@ -5,6 +5,8 @@ use_PFCMD = False
 import os
 import sys
 
+from sqlalchemy import false
+
 # from torch._C import T
 root = os.getcwd()
 sys.path.append(root)
@@ -56,12 +58,12 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=0, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--seed', default=1, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.2, nargs='?', type=float, help='gates std')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=14, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -135,6 +137,8 @@ config.optimize_td      = False
 config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
+config.use_rehearsal = False
+config.train_novel_tasks = True
 config.higher_order = not config.save_model
 if config.higher_order:
     config.train_to_criterion = True
@@ -178,6 +182,7 @@ if no_of_tasks_left > 0:
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     # learn one novel task then rehearse previously learned + novel task
     task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
+    task_seq_sequential = sub_seq + sub_seq + [config.tasks_id_name[novel_task_id]] 
 
 # if config.use_rehearsal:
 #     to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)
@@ -217,11 +222,11 @@ else: # if no pre-trained network proceed with the main training loop.
     testing_log, training_log, net = train(config, net, task_seq, testing_log, training_log , step_i = 0 )
     config.criterion_shuffle_paradigm = 10 # raise it too high so it is no longer stopping training. 
        
-    if not config.higher_order: # run the novel task sequential test
+    if config.train_novel_tasks and not config.higher_order: # run the novel task sequential test
 
         config.print_every_batches = 10
         config.train_to_criterion = True
-        config.max_trials_per_task = 100000
+        config.max_trials_per_task = 10000
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
    

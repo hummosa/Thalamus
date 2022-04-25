@@ -73,7 +73,7 @@ class CTRNN_MD(nn.Module):
                 # *config.G/np.sqrt(config.Nsub*2)
             # Substract mean from each row.
             # self.gates -= np.mean(self.gates, axis=1)[:, np.newaxis]
-        self.register_parameter(name='md_context_id', param=torch.nn.Parameter(torch.ones([1,config.md_size])))
+        self.register_parameter(name='md_context_id', param=torch.nn.Parameter(torch.ones([1,config.md_size])/config.md_size ))
         self.md_context_id.retain_grad()
         # sensory input layer
         self.input2h = nn.Linear(self.input_size, self.hidden_size)

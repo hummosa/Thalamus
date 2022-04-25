@@ -2,6 +2,7 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from analysis.visualization import plot_cluster_discovery
 from logger.logger import SerialLogger
 from tqdm import tqdm, trange
 import gym
@@ -34,11 +35,17 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             print('exluding: ', name)
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-        lr=config.lr*10)
+        lr=config.lr*5)
+        
+    # create non-informative uniform context_ID
+    context_id = torch.ones([1,config.md_size])/config.md_size    
+    context_id = context_id.repeat([config.batch_size, 1])
+
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
     for task_id, task_name in config.tasks_id_name:
         build_env(config, envs, task_id, task_name)
+    running_acc = 0 # just to init
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
@@ -53,13 +60,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         
 
         running_frustration = 0
-        running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
-        
-        # create non-informative uniform context_ID
-        context_id = torch.ones([1,config.md_size])/config.md_size    
-        context_id = context_id.repeat([config.batch_size, 1])
-
         for i in training_bar:
             if config.abort_rehearsal_if_accurate and config.paradigm_sequential:
                 if len(testing_log.accuracies)>0: 
@@ -75,13 +76,21 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             acc  = accuracy_metric(outputs.detach(), labels.detach())
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
-            if (acc - running_acc) > 0.2: # assume some novel something happened
-                config.loop_md_error = 20
+            training_log.md_context_ids.append(context_id.detach().cpu().numpy())
+            bubuffer, bu_accs = [], []
+            if (running_acc-acc) > 0.15: # assume some novel something happened
+                config.loop_md_error = 50
+                context_id_before_loop = net.rnn.md_context_id.detach().clone()
                 for _ in range(config.loop_md_error):
-                    md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels)
+                    bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
+                    bu_acc = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
+                    bu_accs.append(bu_acc)
                 context_id_after_loop = net.rnn.md_context_id.detach()
-                context_id = context_id_after_loop
-                
+                context_id = F.softmax(context_id_after_loop, dim=1)
+                print(f'md adjusted from {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-context_id_before_loop).detach().cpu().numpy()}')
+            if len(bubuffer) > 0:
+                plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+            training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
@@ -121,6 +130,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
             
+            running_acc = 0.7 * running_acc + 0.3 * acc
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 # running_acc = 0.
@@ -130,7 +140,6 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
                     test_in_training(config, net, testing_log, training_log, step_i, envs)
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
-            running_acc = 0.7 * running_acc + 0.3 * acc
 
 
         if config.paradigm_shuffle and config.train_to_criterion and step_i > config.print_every_batches+10:
@@ -398,7 +407,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
     return(testing_log, training_log, net)
 
-def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels):
+def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric):
     bu_context_id = net.rnn.md_context_id    
     bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
     bu_context_id = bu_context_id.repeat([config.batch_size, 1])
@@ -410,10 +419,12 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     context_id.requires_grad_().retain_grad() #shape batch_size x Md_size
                         
     outputs, rnn_activity = net(inputs, sub_id=context_id)
+    acc  = accuracy_metric(outputs.detach(), labels.detach())
     bu_optimizer.zero_grad()
     loss = criterion(outputs, labels)
     loss.backward()
     bu_optimizer.step()
+    return (acc)
 
 def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
     fig, axes = plt.subplots(1,3)
