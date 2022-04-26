@@ -52,10 +52,10 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 00:40:00"
+    , "#SBATCH -t 01:40:00"
     , "#SBATCH --gres=gpu:1"
     , "#SBATCH --constraint=high-capacity"
-    # , "#SBATCH -p halassa"
+    , "#SBATCH -p halassa"
     , "#SBATCH --mem={}G".format(64 if experiment_type == 'cognitive_observer' else 10)
     , '#SBATCH --output=./slurm/%j.out'
     , "#SBATCH --job-name={}_{}".format(jobi,exp_name)

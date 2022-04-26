@@ -35,7 +35,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             print('exluding: ', name)
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-        lr=config.lr*5)
+        lr=config.lr*50)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
@@ -273,6 +273,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
         training_log.switch_task_id.append(task_id)
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
         
+        cognitive_loss = None
         running_frustration = 0
         running_acc = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
@@ -296,15 +297,15 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 bu_context_id.requires_grad_()
                 training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
                 
-            config.loop_md_error = 5
+            config.loop_md_error = 0
             if config.loop_md_error:
                 context_id_before_loop = net.rnn.md_context_id.detach()
                 buffer_grads.append(context_id_before_loop.detach().cpu().numpy())
                 for _ in range(config.loop_md_error):
-                    md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels)
+                    md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
                 context_id_after_loop = net.rnn.md_context_id.detach()
                 buffer_grads_targets.append(context_id_after_loop.detach().cpu().numpy())
-
+            
             if config.optimize_td:
                 #########Gather cognitive inputs ###############
                 if len(buffer_acts) > config.horizon-1:
@@ -352,7 +353,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
             buffer_accuracies.append(acc)
             buffer_task_ids.append(task_id)
-            if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0);buffer_grads_targets.pop(0);buffer_grads.pop(0)
+            if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0)
+            if (len(buffer_acts) > config.horizon) and config.optimize_td: buffer_grads_targets.pop(0);buffer_grads.pop(0)
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             if config.optimize_bu: bu_optimizer.zero_grad()

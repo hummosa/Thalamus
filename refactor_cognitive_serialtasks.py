@@ -56,9 +56,9 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=400, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=50, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
@@ -136,10 +136,13 @@ config.cog_net_hidden_size = 100
 
 config.loop_md_error = int(args.var1)
 config.actually_use_task_ids = bool(args.var3)
-config.train_to_criterion = False
+config.md_loop_rehearsals = 15
+config.train_to_criterion = True
 config.use_rehearsal = False
 config.train_novel_tasks = True # Not functional at the moment.
 config.higher_order = not config.save_model
+config.higher_cog_test_multiple = 5
+
 if config.higher_order:
     config.train_to_criterion = True
     config.random_rehearsals = 5 if config.paradigm_sequential else 4000
@@ -191,7 +194,7 @@ for _ in range(config.random_rehearsals):
     random.shuffle(sub_seq)
     task_seq_random+=sub_seq
 task_seq_optimize = []
-for _ in range(500):
+for _ in range(config.higher_cog_test_multiple):
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     if not config.paradigm_alternate: random.shuffle(sub_seq)
     task_seq_optimize+=sub_seq

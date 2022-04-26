@@ -132,7 +132,7 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     ax.set_xlim([x0, x1])
     
     ax = axes[1] # context ids
-    md = np.stack([m[0] for m in training_log.md_context_ids])
+    md = np.stack([m[0] for m in context_ids])
     print(fig.get_axes())
     im = sns.heatmap(md.T, cmap='Reds', ax = ax)#, vmax=md.max()/3)
     print(fig.get_axes())
@@ -153,13 +153,14 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     ax.set_ylabel('current task accuracy')
     ax.set_xlabel('Batches (100 trials)')
 
+    switches = training_log.switch_trialxxbatch[:-1] # don't know why there is an extra one..
     ax = axes[3]
     # ax.plot(training_log.trials_to_crit, label = 'trials to crit')
-    ax.plot(training_log.switch_trialxxbatch, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
-    ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
+    ax.plot(switches, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
+    ax.plot(switches,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
     filter=10
     filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
-    ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'filtered {filter}', color='tab:orange')
+    ax.plot(switches,filtered_mean, label=f'filtered {filter}', color='tab:orange')
     ax.set_ylabel('Trials to criterion')
     ax.set_xlabel('Task order')
     ax.set_ylim(0, filtered_mean.max()*1.5)
