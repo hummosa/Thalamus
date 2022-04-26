@@ -120,32 +120,53 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     fig, axes = plt.subplots(4,1, figsize=[12,6], sharex = False)
 
     ax = axes[0]
-    ax.set_position(mpl.transforms.Bbox([[0.125, 0.715], [.747, 0.880]]))
+    # print(ax.get_position())
+    # ax.set_position(mpl.transforms.Bbox([[0.125, 0.715], [.747, 0.880]]))
     ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
     for ri in range(len(switches)-1):
         ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
         id = training_log.switch_task_id[ri]
         task_name = config.human_task_names[id]
         ax.text(training_log.switch_trialxxbatch[ri], 1.0 + np.random.uniform(-0.1, 0.25), task_name, color= cmap.to_rgba(id) , fontsize=10)
-    ax.set_xlim([x0, x1])
     ax.set_ylabel('current task accuracy')
+    ax.set_xlim([x0, x1])
     
     ax = axes[1] # context ids
     md = np.stack([m[0] for m in training_log.md_context_ids])
+    print(fig.get_axes())
     im = sns.heatmap(md.T, cmap='Reds', ax = ax)#, vmax=md.max()/3)
-    ax.get_shared_x_axes().join(ax, axes[0])
+    print(fig.get_axes())
+    print('colorbar pos:', fig.get_axes()[-1].get_position())
+    fig.get_axes()[-1].set_position(mpl.transforms.Bbox([[0.9037,0.52],[.90785, 0.680]]))
+    # ax.get_shared_x_axes().join(ax, axes[0])
     ax.set_xticks(axes[0].get_xticks())
+    ax.set_xticklabels(axes[0].get_xticklabels())
+    ax.set_xlabel('Batches (100 trials)')
+    ax.set_ylabel('Task Rule vector')
     
+    ax.set_position(mpl.transforms.Bbox([[0.125,0.52],[.942, 0.683]]))
+    print(ax.get_position())
+
     ax = axes[2] # mean_bu
-    ax.plot(training_log.trials_to_crit)
-    filter=20
-    ax.plot(np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter))
-    
-    ax = axes[3]
     ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
     ax.set_xlim([x0, x1])
     ax.set_ylabel('current task accuracy')
+    ax.set_xlabel('Batches (100 trials)')
 
+    ax = axes[3]
+    # ax.plot(training_log.trials_to_crit, label = 'trials to crit')
+    ax.plot(training_log.switch_trialxxbatch, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
+    ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
+    filter=10
+    filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
+    ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'filtered {filter}', color='tab:orange')
+    ax.set_ylabel('Trials to criterion')
+    ax.set_xlabel('Task order')
+    ax.set_ylim(0, filtered_mean.max()*1.5)
+    ax.legend()
+    print(ax.get_position())
+    ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.263]]))
+    # fig.tight_layout()
     identifiers = 9
     plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 

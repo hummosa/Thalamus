@@ -81,6 +81,7 @@ class BaseConfig(object):
         self.paradigm_alternate = False
         self.one_batch_optimization = False  # Use only one batch to infer task rule input. 
         self.abort_rehearsal_if_accurate
+        self.random_rehearsals = 0
         # RNN model
         self.input_size = 33
         self.hidden_size = 356

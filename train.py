@@ -67,7 +67,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     if (i==0) and (testing_log.accuracies[-1][task_id]) > (criterion_accuaracy-0.05): # criterion with some leniency. Only check at the begning of this current task.
                         print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
                         break # stop training this task and jump to the next.
-            # context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
+            if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'):
+                context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
             labels.refine_names('timestep', 'batch', 'output_dim')
@@ -78,8 +79,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
             bubuffer, bu_accs = [], []
-            if (running_acc-acc) > 0.15: # assume some novel something happened
-                config.loop_md_error = 400
+            if ((running_acc-acc) > 0.15) and config.loop_md_error: # assume some novel something happened
                 context_id_before_loop = net.rnn.md_context_id.detach().clone()
                 for _ in range(config.loop_md_error):
                     bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
@@ -87,7 +87,6 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     bu_accs.append(bu_acc)
                     bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
                     if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
-                        bu_running_acc = 0.5
                         break
                 context_id_after_loop = net.rnn.md_context_id.detach()
                 context_id = F.softmax(context_id_after_loop, dim=1)
@@ -95,7 +94,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # if len(bubuffer) > 0:
             #     plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
             #     plot_long_term_cluster_discovery(config, training_log, testing_log)
-            training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
+            # training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
@@ -103,7 +102,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss = criterion(outputs, labels, use_loss='mse')
             loss.backward()
            
-            optimizer.step()
+            if not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already solved task
+                optimizer.step()
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
             # plt.savefig('example_inpujt_label_output.jpg')
@@ -136,7 +136,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             step_i+=1
             
             running_acc = 0.7 * running_acc + 0.3 * acc
-            if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
+            if ((running_acc > criterion_accuaracy) ) or (bu_running_acc > (criterion_accuaracy-0.1)) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 # running_acc = 0.
                 if training_log.trials_to_crit[-1] == 0: # if no trial to crit recorded previously
@@ -159,7 +159,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
     testing_log.total_batches, training_log.total_batches = step_i, step_i
     try:
-        plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+        plot_long_term_cluster_discovery(config, training_log, testing_log)
+        # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
     except:
         pass
     return(testing_log, training_log, net)

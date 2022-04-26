@@ -17,24 +17,21 @@ experiments += ['random_gates_only', 'random_gates_no_rehearsal', 'random_gates_
 experiments = ['random_gates_rehearsal_no_train_to_criterion'] #  
 experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #  
 experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #  
-experiments = ['random_gates_add',]
+experiments = ['random_gates_add']#,'random_gates_mul']
 
-num_of_tasks_to_run = [5] 
-exp_sig = 'cluster'
+num_of_tasks_to_run = [5,10] 
+exp_sig = 'cluster_fu2'
 
-Seeds = range(0, 5)
-Var1 = [0] #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
+Seeds = range(0, 9)
+Var1 = [0, 400] #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
 Var2 = num_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
-Var3 = [0] # [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
+Var3 = [0,1] # [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 Var4 = [0] # [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
-
-
 
 expVars =  [[seed, experiment, x1, x2, x3, x4] for seed in Seeds for experiment in experiments for x1 in Var1 for x2 in Var2 for x3 in Var3 for x4 in Var4 ]
 # [expVars[i].insert(0, i) for i in range(len(expVars))] # INSERT exp ID # in the first col.
 print ('Total no of experiments generated : ', len(expVars))
 # psqnt(expVars)
-
 
 #%% Load neuron
 if sys.platform != 'win32':
@@ -55,7 +52,7 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 00:30:00"
+    , "#SBATCH -t 00:40:00"
     , "#SBATCH --gres=gpu:1"
     , "#SBATCH --constraint=high-capacity"
     # , "#SBATCH -p halassa"

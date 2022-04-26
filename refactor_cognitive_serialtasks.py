@@ -52,12 +52,13 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
+# my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='gates mean ')
+my_parser.add_argument('--var1',  default=400, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=0.2, nargs='?', type=float, help='gates std')
+my_parser.add_argument('--var3',  default=0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
@@ -133,12 +134,15 @@ config.optimize_td      = False
 config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
+config.loop_md_error = int(args.var1)
+config.actually_use_task_ids = bool(args.var3)
+config.train_to_criterion = False
 config.use_rehearsal = False
-config.train_novel_tasks = True
+config.train_novel_tasks = True # Not functional at the moment.
 config.higher_order = not config.save_model
 if config.higher_order:
     config.train_to_criterion = True
-    config.random_rehearsals = int(args.var1) if config.paradigm_sequential else 4000
+    config.random_rehearsals = 5 if config.paradigm_sequential else 4000
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
@@ -179,18 +183,6 @@ if no_of_tasks_left > 0:
     # learn one novel task then rehearse previously learned + novel task
     task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
     task_seq_sequential = sub_seq * 15  #+ [config.tasks_id_name[novel_task_id]] + sub_seq 
-
-# if config.use_rehearsal:
-#     to_no = min(args.num_of_tasks+4, len(config.tasks_id_name)+1)
-
-#     task_sub_seqs = [[config.tasks_id_name[i] for i in range(args.num_of_tasks, s)] for s in range(args.num_of_tasks+2, to_no)] # interleave tasks and add one task at a time
-#     for sub_seq in task_sub_seqs: 
-#         # task_seq_sequential = np.concatenate([task_seq, np.stack(sub_seq)])
-#         task_seq_sequential +=sub_seq
-#     task_seq_sequential +=sub_seq # one last rehearsal
-# else:
-#     # task_seq = np.concatenate([task_seq, np.stack(config.tasks_id_name)[-no_of_tasks_left:]])
-#     task_seq_sequential = (config.tasks_id_name)[-no_of_tasks_left:]
 
 # Now adding many random rehearsals:
 task_seq_random = []
@@ -253,6 +245,10 @@ np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', 
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/config_{config.exp_signature}.npy', config, allow_pickle=True)
 print('testing logs saved to : '+ './files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy')
+
+data_folder = ''
+from utils import get_logs_and_files
+
 
 
 ## Plots
