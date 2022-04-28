@@ -35,7 +35,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             print('exluding: ', name)
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-        lr=config.lr*50)
+        lr=config.lr*config.lr_multiplier)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
@@ -67,7 +67,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     if (i==0) and (testing_log.accuracies[-1][task_id]) > (criterion_accuaracy-0.05): # criterion with some leniency. Only check at the begning of this current task.
                         print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
                         break # stop training this task and jump to the next.
-            if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'):
+            if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
                 context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
@@ -92,8 +92,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 context_id = F.softmax(context_id_after_loop, dim=1)
                 print(f'md adjusted from {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-context_id_before_loop).detach().cpu().numpy()}')
             # if len(bubuffer) > 0:
-            #     plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
-            #     plot_long_term_cluster_discovery(config, training_log, testing_log)
+                # plt.close('all')
+                # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+                # plot_long_term_cluster_discovery(config, training_log, testing_log)
             # training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
@@ -112,7 +113,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
 
             if type(rnn_activity) is tuple:
                 rnn_activity, md = rnn_activity
-                training_log.md_context_ids.append(md.detach().cpu().numpy())
+                # training_log.md_context_ids.append(md.detach().cpu().numpy())
                 training_log.md_grads.append(md.grad.cpu().numpy())
             training_log.write_basic(step_i, loss.item(), acc, task_id)
             training_log.gradients.append(np.array([torch.norm(p.grad).item() for p in net.parameters() if p.grad is not None]) )
@@ -132,7 +133,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
 
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                test_in_training(config, net, testing_log, training_log, step_i, envs)
+                pass
+                # test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
             
             running_acc = 0.7 * running_acc + 0.3 * acc
@@ -143,7 +145,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
-                    test_in_training(config, net, testing_log, training_log, step_i, envs)
+                    # test_in_training(config, net, testing_log, training_log, step_i, envs)
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
 
 
@@ -295,7 +297,10 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 bu_context_id = bu_context_id.repeat([config.batch_size, 1])
                 bu_context_id = bu_context_id.to(config.device)
                 bu_context_id.requires_grad_()
-                training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
+                if config.md_loop_rehearsals > 0:
+                    training_log.md_context_ids.append(bu_context_id.detach().cpu().numpy())
+                else:
+                    training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
                 
             config.loop_md_error = 0
             if config.loop_md_error:
@@ -424,7 +429,7 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     bu_context_id = bu_context_id.repeat([config.batch_size, 1])
     bu_context_id = bu_context_id.to(config.device)
     bu_context_id.requires_grad_()
-    training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
+    # training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
 
     context_id = bu_context_id
     context_id.requires_grad_().retain_grad() #shape batch_size x Md_size

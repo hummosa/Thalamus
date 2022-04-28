@@ -58,8 +58,8 @@ my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?
 my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=50, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
-my_parser.add_argument('--var4', default=0.4, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var4', default=25.0, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
@@ -136,12 +136,13 @@ config.cog_net_hidden_size = 100
 
 config.loop_md_error = int(args.var1)
 config.actually_use_task_ids = bool(args.var3)
-config.md_loop_rehearsals = 15
+config.lr_multiplier = float(args.var4)
+config.md_loop_rehearsals = 25
 config.train_to_criterion = True
 config.use_rehearsal = False
 config.train_novel_tasks = True # Not functional at the moment.
 config.higher_order = not config.save_model
-config.higher_cog_test_multiple = 5
+config.higher_cog_test_multiple = 2
 
 if config.higher_order:
     config.train_to_criterion = True
@@ -185,7 +186,7 @@ if no_of_tasks_left > 0:
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
     # learn one novel task then rehearse previously learned + novel task
     task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
-    task_seq_sequential = sub_seq * 15  #+ [config.tasks_id_name[novel_task_id]] + sub_seq 
+    task_seq_sequential = sub_seq * config.md_loop_rehearsals  #+ [config.tasks_id_name[novel_task_id]] + sub_seq 
 
 # Now adding many random rehearsals:
 task_seq_random = []
@@ -257,7 +258,7 @@ from utils import get_logs_and_files
 ## Plots
 from analysis import visualization as viz
 
-viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
+# viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
 
 if config.higher_order and not config.optimize_policy:
     viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)

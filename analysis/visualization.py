@@ -102,8 +102,8 @@ def plot_accuracies( config, training_log, testing_log):
 def plot_long_term_cluster_discovery( config, training_log, testing_log):
     if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids
     elif len(training_log.td_context_ids) > 0: context_ids =  training_log.td_context_ids
+    elif len(training_log.md_context_ids) > 0: context_ids =  training_log.md_context_ids
     else: 
-        # len(training_log.md_context_ids) > 0: 
         policy_context_id = np.ones([1,config.md_size])/config.md_size
         context_ids = [policy_context_id.repeat(config.batch_size, 0)] * training_log.stamps[-1]
 
@@ -133,10 +133,10 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     
     ax = axes[1] # context ids
     md = np.stack([m[0] for m in context_ids])
-    print(fig.get_axes())
+    # print(fig.get_axes())
     im = sns.heatmap(md.T, cmap='Reds', ax = ax)#, vmax=md.max()/3)
-    print(fig.get_axes())
-    print('colorbar pos:', fig.get_axes()[-1].get_position())
+    # print(fig.get_axes())
+    # print('colorbar pos:', fig.get_axes()[-1].get_position())
     fig.get_axes()[-1].set_position(mpl.transforms.Bbox([[0.9037,0.52],[.90785, 0.680]]))
     # ax.get_shared_x_axes().join(ax, axes[0])
     ax.set_xticks(axes[0].get_xticks())
@@ -145,29 +145,35 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     ax.set_ylabel('Task Rule vector')
     
     ax.set_position(mpl.transforms.Bbox([[0.125,0.52],[.942, 0.683]]))
-    print(ax.get_position())
+    # ax.set_position(mpl.transforms.Bbox([[0.125,0.52],[.99, 0.683]]))
+    # print(ax.get_position())
 
     ax = axes[2] # mean_bu
     ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
     ax.set_xlim([x0, x1])
     ax.set_ylabel('current task accuracy')
     ax.set_xlabel('Batches (100 trials)')
+    # print(ax.get_position())
+    # =0.125, y0=0.32195652173913036, x1=0.9, y1=0.4860869565217391
+    ax.set_position(mpl.transforms.Bbox([[0.125,0.32],[.9, 0.45]]))
 
-    switches = training_log.switch_trialxxbatch[:-1] # don't know why there is an extra one..
     ax = axes[3]
     # ax.plot(training_log.trials_to_crit, label = 'trials to crit')
-    ax.plot(switches, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
-    ax.plot(switches,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
-    filter=10
-    filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
-    ax.plot(switches,filtered_mean, label=f'filtered {filter}', color='tab:orange')
-    ax.set_ylabel('Trials to criterion')
-    ax.set_xlabel('Task order')
-    ax.set_ylim(0, filtered_mean.max()*1.5)
-    ax.legend()
-    print(ax.get_position())
+    try:
+        ax.plot(training_log.switch_trialxxbatch, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
+        ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
+        filter=10
+        filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
+        ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'filtered {filter}', color='tab:orange')
+        ax.set_ylabel('Trials to criterion')
+        ax.set_xlabel('Task order')
+        ax.set_xlim([x0, x1])
+        ax.set_ylim(0, filtered_mean.max()*1.5)
+        ax.legend()
+    except:
+        pass
+    # print(ax.get_position())
     ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.263]]))
-    # fig.tight_layout()
     identifiers = 9
     plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 
@@ -265,22 +271,25 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
     # for ri in range(len(training_log.switch_trialxxbatch)-1):
     #     ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
     ax = axes[1]
-    t = 0
-    d = training_log.stamps[-1]
-    average_acc =[]
-    taa = []
-    for logi in range(config.num_of_tasks):
-        taa.append([test_acc[logi] for test_acc in testing_log.accuracies])
-    average_acc.append(np.stack(taa))
+    try:
+        t = 0
+        d = training_log.stamps[-1]
+        average_acc =[]
+        taa = []
+        for logi in range(config.num_of_tasks):
+            taa.append([test_acc[logi] for test_acc in testing_log.accuracies])
+        average_acc.append(np.stack(taa))
 
-    testing_t = convert_train_to_test_idx(training_log, testing_log, t)
-    testing_e =convert_train_to_test_idx(training_log, testing_log, t+d)
-    ax.plot(testing_log.stamps[testing_t:testing_e], average_acc[0].mean(0)[testing_t:testing_e])
-    ax.axvspan(0, d, color='tab:blue', alpha=0.2)
-    ax.set_ylim([0,1])
-    ax.set_ylabel('all tasks with Rule accuracy')
-    # ax.set_title('With task rule input provided')
-    # print(ax.get_position())
+        testing_t = convert_train_to_test_idx(training_log, testing_log, t)
+        testing_e =convert_train_to_test_idx(training_log, testing_log, t+d)
+        ax.plot(testing_log.stamps[testing_t:testing_e], average_acc[0].mean(0)[testing_t:testing_e])
+        ax.axvspan(0, d, color='tab:blue', alpha=0.2)
+        ax.set_ylim([0,1])
+        ax.set_ylabel('all tasks with Rule accuracy')
+        # ax.set_title('With task rule input provided')
+        # print(ax.get_position())
+    except:
+        pass
     ax.set_position(mpl.transforms.Bbox([[0.125, 0.519], [.747, 0.683]]))    
 
     ax = axes[2]
