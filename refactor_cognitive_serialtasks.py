@@ -55,12 +55,12 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=50, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--seed', default=11, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--var1',  default=400, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=2, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -137,7 +137,8 @@ config.cog_net_hidden_size = 100
 config.loop_md_error = int(args.var1)
 config.actually_use_task_ids = bool(args.var3)
 config.lr_multiplier = float(args.var4)
-config.train_to_criterion = True
+config.train_to_criterion = False
+config.max_trials_per_task = int(20 * config.batch_size)
 config.use_rehearsal = False
 config.md_loop_rehearsals = 25 # Train the sequence of tasks for this many times
 config.train_novel_tasks = True  # then add a novel task, then the sequence again, and then the same novel task at the end. 

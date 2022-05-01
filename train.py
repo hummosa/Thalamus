@@ -34,8 +34,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         else:
             print('exluding: ', name)
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
-    bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-        lr=config.lr*config.lr_multiplier)
+    # bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
+        # lr=config.lr*config.lr_multiplier)
+    bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*300)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
