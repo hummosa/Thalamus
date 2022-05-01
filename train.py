@@ -104,7 +104,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
             
-            loss = criterion(outputs, labels, use_loss='mse')
+            loss = criterion(outputs, labels, use_loss='nll')
             loss.backward()
            
             if not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already solved task

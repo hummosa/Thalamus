@@ -56,10 +56,10 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=10, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=50, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
-my_parser.add_argument('--var4', default=0.1, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
