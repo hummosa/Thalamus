@@ -219,18 +219,22 @@ def plot_cluster_discovery( config, bubuffer, training_log, testing_log, bu_accs
     
     ax = axes[2] # mean_bu
     # im = sns.heatmap(mean_bu.T, cmap='Reds', ax = ax, vmax=mean_bu.max()/3)
-    bu_all = np.concatenate((mean_bu[0], mean_bu[-1], mean_bu[-1]-mean_bu[0]))
-    ax.bar(range(len(bu_all)), bu_all)
-    ax.set_title('last md')
-    # ax.set_xlim([x0, x1])
-    ax.set_ylim([-1, 4])
-    ax.axvspan(14,15, alpha=0.4)
-    ax.axvspan(29,30, alpha=0.4)
-    
+    try:
+        bu_all = np.concatenate((mean_bu[0], mean_bu[-1], mean_bu[-1]-mean_bu[0]))
+        ax.bar(range(len(bu_all)), bu_all)
+        ax.set_title('last md')
+        # ax.set_xlim([x0, x1])
+        ax.set_ylim([-1, 4])
+        ax.axvspan(14,15, alpha=0.4)
+        ax.axvspan(29,30, alpha=0.4)
+    except:
+        pass
     ax = axes[3]
     ax.plot(bu_accs)
     identifiers = 9
-    plt.savefig('./files/'+ config.exp_name+f'/BU_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
+    ddir = './files/'+ config.exp_name + '/latent_updates'
+    os.makedirs(ddir, exist_ok=True)
+    plt.savefig(ddir+f'/BU_cluster_discovery_{config.exp_signature}_i{training_log.stamps[-1]}_{identifiers}.jpg', dpi=200)
 
 def plot_credit_assignment_inference( config, training_log, testing_log):
     if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids

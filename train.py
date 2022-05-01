@@ -58,7 +58,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.switch_task_id.append(task_id)
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
         criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
-        
+        ## Adjust learning rate of BU optim:
+        if len(training_log.trials_to_crit) > 5:
+            for param_group in bu_optimizer.param_groups:
+                param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
+
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
@@ -91,9 +95,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 context_id_after_loop = net.rnn.md_context_id.detach()
                 context_id = F.softmax(context_id_after_loop, dim=1)
                 print(f'md adjusted from {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-context_id_before_loop).detach().cpu().numpy()}')
-            # if len(bubuffer) > 0:
-                # plt.close('all')
-                # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+            if len(bubuffer) > 0:
+                plt.close('all')
+                plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
                 # plot_long_term_cluster_discovery(config, training_log, testing_log)
             # training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')

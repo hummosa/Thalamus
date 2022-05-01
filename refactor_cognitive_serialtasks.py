@@ -56,10 +56,10 @@ my_parser.add_argument('exp_name',  default='cluster', type=str, nargs='?', help
 my_parser.add_argument('--experiment_type', default='random_gates_add', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=50, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=10, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
-my_parser.add_argument('--var4', default=25.0, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--var4', default=0.1, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--num_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
@@ -137,16 +137,16 @@ config.cog_net_hidden_size = 100
 config.loop_md_error = int(args.var1)
 config.actually_use_task_ids = bool(args.var3)
 config.lr_multiplier = float(args.var4)
-config.md_loop_rehearsals = 25
 config.train_to_criterion = True
 config.use_rehearsal = False
-config.train_novel_tasks = True # Not functional at the moment.
+config.md_loop_rehearsals = 25 # Train the sequence of tasks for this many times
+config.train_novel_tasks = True  # then add a novel task, then the sequence again, and then the same novel task at the end. 
 config.higher_order = not config.save_model
 config.higher_cog_test_multiple = 2
 
 if config.higher_order:
     config.train_to_criterion = True
-    config.random_rehearsals = 5 if config.paradigm_sequential else 4000
+    config.random_rehearsals = 5 if config.paradigm_sequential else 4000 # if needing to train the network from scratch use this number of rehearsals to prepare for the latent updates phase
     config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
@@ -178,15 +178,16 @@ elif config.paradigm_shuffle:
     config.print_every_batches = 100
     config.no_shuffled_trials = 12000
 
-# add, at the end, one novel task from the unlearned pile:
+# add, rehearse the md_loop then at the end, one novel task from the unlearned pile:
 task_seq_sequential = []
 no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
 if no_of_tasks_left > 0: 
     novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
     sub_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]
-    # learn one novel task then rehearse previously learned + novel task
-    task_seq_sequential = [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
     task_seq_sequential = sub_seq * config.md_loop_rehearsals  #+ [config.tasks_id_name[novel_task_id]] + sub_seq 
+    # learn one novel task then rehearse previously learned + novel task
+    if config.train_novel_tasks:
+        task_seq_sequential += [config.tasks_id_name[novel_task_id]] + sub_seq + [config.tasks_id_name[novel_task_id]] 
 
 # Now adding many random rehearsals:
 task_seq_random = []
