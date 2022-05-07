@@ -1,3 +1,4 @@
+from cmath import nan
 import torch
 import numpy as np
 import torch.nn as nn
@@ -33,10 +34,14 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_params.append(param)
         else:
             print('exluding: ', name)
+    
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
-    # bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-        # lr=config.lr*config.lr_multiplier)
-    bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*300)
+    
+    if config.bu_adam:
+        bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
+            lr=config.lr*config.lr_multiplier)
+    else:
+        bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
@@ -48,6 +53,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         build_env(config, envs, task_id, task_name)
     running_acc = 0 # just to init
     bu_running_acc = 0
+    recall_test_context_id, test_task_id = None, None # init these to use for testing latent recall
+    training_log.recall_bu_accuracy, training_log.recall_latent_correlation = [], []
+    
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
@@ -60,9 +68,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
         criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
         ## Adjust learning rate of BU optim:
-        if len(training_log.trials_to_crit) > 5:
-            for param_group in bu_optimizer.param_groups:
-                param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
+        # if len(training_log.trials_to_crit) > 5:
+        #     for param_group in bu_optimizer.param_groups:
+        #         param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
 
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
@@ -77,35 +85,35 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
             labels.refine_names('timestep', 'batch', 'output_dim')
+            ########################################################################
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
+            ########################################################################
             # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
             acc  = accuracy_metric(outputs.detach(), labels.detach())
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
-            bubuffer, bu_accs = [], []
-            if ((running_acc-acc) > 0.15) and config.loop_md_error: # assume some novel something happened
-                context_id_before_loop = net.rnn.md_context_id.detach().clone()
-                for _ in range(config.loop_md_error):
-                    bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
-                    bu_acc = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
-                    bu_accs.append(bu_acc)
-                    bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
-                    if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
-                        break
-                context_id_after_loop = net.rnn.md_context_id.detach()
-                context_id = F.softmax(context_id_after_loop, dim=1)
-                print(f'md adjusted from {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-context_id_before_loop).detach().cpu().numpy()}')
-            if len(bubuffer) > 0:
-                plt.close('all')
-                plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+            if ((running_acc-acc) > 0.3) and config.loop_md_error and (step_i > 1000): # assume some novel something happened
+                bu_running_acc, context_id_after_lu = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                context_id = F.softmax(torch.from_numpy(context_id_after_lu), dim=1).to(config.device)
+            if (not (recall_test_context_id is None)) and config.test_latent_recall:
+                test_bu_running_acc, test_context_id_after_lu = latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, 
+                test_task_id=test_task_id, test_task_context=recall_test_context_id)
+                latent_correlation = np.correlate(recall_test_context_id.squeeze(), test_context_id_after_lu.squeeze())
+            else:
+                latent_correlation, test_bu_running_acc = nan, nan
+            training_log.recall_latent_correlation.append(latent_correlation)
+            training_log.recall_bu_accuracy.append(test_bu_running_acc)
+
+
+                # plt.close('all')
                 # plot_long_term_cluster_discovery(config, training_log, testing_log)
             # training_log.bu_context_ids.append(context_id.detach().cpu().numpy())
             # print(f'shape of outputs: {outputs.shape},    and shape of rnn_activity: {rnn_activity.shape}')
             #Shape of outputs: torch.Size([20, 100, 17]),    and shape of rnn_activity: torch.Size ([20, 100, 256
             optimizer.zero_grad()
             
-            loss = criterion(outputs, labels, use_loss='nll')
+            loss = criterion(outputs, labels, use_loss=config.training_loss)
             loss.backward()
            
             if not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already solved task
@@ -151,6 +159,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
                     # test_in_training(config, net, testing_log, training_log, step_i, envs)
+                    recall_test_context_id, test_task_id = net.rnn.md_context_id.clone().detach().cpu().numpy(), task_id
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
 
 
@@ -171,6 +180,51 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     except:
         pass
     return(testing_log, training_log, net)
+
+def latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels):
+    
+    context_id_before_loop = net.rnn.md_context_id.detach().clone()
+    bubuffer, bu_accs, latent_losses = [], [], []
+    for _ in range(config.loop_md_error):
+        bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
+        bu_acc,latent_loss = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
+        bu_accs.append(bu_acc); latent_losses.append(latent_loss)
+        bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
+        if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
+            break
+    context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
+    cb = context_id_before_loop.detach().cpu().numpy()
+    print(f'MD update {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-cb)}')
+
+    if len(bubuffer) > 0:
+        plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs, latent_losses)
+    return bu_running_acc, context_id_after_loop
+
+def latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, test_task_id, test_task_context=None):
+    env = envs[int(test_task_id)]
+    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+    
+    ### Swap out the context the network has
+    context_id_before_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
+    net.rnn.md_context_id.data = torch.from_numpy(test_task_context).to(config.device)
+
+    bubuffer, bu_accs = [], []
+    for _ in range(config.loop_md_error):
+        bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
+        bu_acc,_ = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
+        bu_accs.append(bu_acc)
+        bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
+        if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
+            break
+    # put back the context id for the ongoing training task
+    context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
+    net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
+    # net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
+
+    print(f'Deviation from previous context {test_task_context} by {(context_id_after_loop-test_task_context)}')
+    if len(bubuffer) > 0:
+        plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+    return bu_running_acc, context_id_after_loop
 
 def test_in_training(config, net, testing_log, training_log, step_i, envs):
     # torch.set_grad_enabled(False)
@@ -445,7 +499,7 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     loss = criterion(outputs, labels)
     loss.backward()
     bu_optimizer.step()
-    return (acc)
+    return (acc, loss.detach().cpu().numpy())
 
 def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
     fig, axes = plt.subplots(1,3)

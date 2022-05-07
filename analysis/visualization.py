@@ -177,14 +177,13 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     identifiers = 9
     plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 
-def plot_cluster_discovery( config, bubuffer, training_log, testing_log, bu_accs):
+def plot_cluster_discovery( config, bubuffer, training_log, testing_log, bu_accs, latent_losses):
     if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids
     elif len(training_log.td_context_ids) > 0: context_ids =  training_log.td_context_ids
     else: 
         # len(training_log.md_context_ids) > 0: 
         policy_context_id = np.ones([1,config.md_size])/config.md_size
         context_ids = [policy_context_id.repeat(config.batch_size, 0)] * training_log.stamps[-1]
-
 
     mean_bu = np.stack(bubuffer).squeeze()
     ex_bu = np.stack([bu[0] for bu in bubuffer])
@@ -230,10 +229,10 @@ def plot_cluster_discovery( config, bubuffer, training_log, testing_log, bu_accs
     except:
         pass
     ax = axes[3]
-    ax.plot(bu_accs)
+    # ax.plot(bu_accs)
+    ax.plot(np.stack(latent_losses))
     identifiers = 9
     ddir = './files/'+ config.exp_name + '/latent_updates'
-    os.makedirs(ddir, exist_ok=True)
     plt.savefig(ddir+f'/BU_cluster_discovery_{config.exp_signature}_i{training_log.stamps[-1]}_{identifiers}.jpg', dpi=200)
 
 def plot_credit_assignment_inference( config, training_log, testing_log):
