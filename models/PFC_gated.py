@@ -158,6 +158,21 @@ class RNN_MD(nn.Module):
         rnn_activity = self.drop_layer(rnn_activity)
         out = self.fc(rnn_activity)
         return out, rnn_activity
+class RNN_MD_GRU(nn.Module):
+    """GRU compariosn
+    """
+    def __init__(self, config):
+        super().__init__()
+        
+        self.rnn = nn.GRU(config.input_size, config.hidden_size, batch_first=False)
+        self.drop_layer = nn.Dropout(p=0.05)
+        self.fc = nn.Linear(config.hidden_size, config.output_size)
+
+    def forward(self, x, sub_id):
+        rnn_activity, _ = self.rnn(x)
+        rnn_activity = self.drop_layer(rnn_activity)
+        out = self.fc(rnn_activity)
+        return out, rnn_activity
 
 class Cognitive_Net(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):

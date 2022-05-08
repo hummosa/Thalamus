@@ -33,7 +33,7 @@ from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
 from logger.logger import SerialLogger
 from train import train, optimize
-from utils import stats, get_trials_batch, get_performance, accuracy_metric, sparse_with_mean
+from utils import stats, get_trials_batch, get_performance, accuracy_metric, sparse_with_mean, get_tasks_order
 # visualization
 import matplotlib as mpl
 mpl.rcParams['axes.spines.left'] = True
@@ -55,8 +55,8 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=11, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--seed', default=8, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--var1',  default=400, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
@@ -134,7 +134,7 @@ config.optimize_td      = False
 config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
-config.loop_md_error = int(args.var1)
+config.no_latent_updates = int(args.var1)
 config.actually_use_task_ids = bool(args.var3)
 config.lr_multiplier = float(args.var4)
 config.bu_adam = False # SGD
@@ -152,8 +152,8 @@ except:
 os.makedirs(ddir, exist_ok=True)
 
 config.test_latent_recall = False  # in the second block of training, repeatedly test recall of previous latents and ability to recover accuracy wiht latent updates as a function of weight updates on the next task.
-config.md_loop_rehearsals = 25 # Train the sequence of tasks for this many times
-config.train_novel_tasks = True  # then add a novel task, then the sequence again, and then the same novel task at the end. 
+config.md_loop_rehearsals = 20 # Train the sequence of tasks for this many times
+config.train_novel_tasks = False  # then add a novel task, then the sequence again, and then the same novel task at the end. 
 config.higher_order = not config.save_model
 config.higher_cog_test_multiple = 2
 config.training_loss = 'mse'
@@ -165,8 +165,9 @@ if config.higher_order:
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
     #Shuffle tasks
-    idx = rng.permutation(range(len(config.tasks)))
-    new_order_tasks = ((np.array(config.tasks)[idx]).tolist())
+    # idx = rng.permutation(range(len(config.tasks)))
+    # new_order_tasks = ((np.array(config.tasks)[idx]).tolist())
+    new_order_tasks = get_tasks_order(args.seed) # make sure the first two are opposites and then shuffle the rest
     config.tasks = new_order_tasks # assigns the order to tasks_id_name but retains the standard task_id
 
 task_seq = []
@@ -181,7 +182,7 @@ if config.paradigm_sequential:
         task_seq+=sub_seq # One additional final rehearsal, 
         # task_seq+=sub_seq # yet another additional final rehearsal, 
     else:
-        task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)] * config.md_loop_rehearsals 
+        task_seq = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  
     if config.paradigm_alternate:
         task_seq = task_seq * config.switches
         
@@ -226,21 +227,32 @@ if config.load_saved_rnn1:
     print('____ loading model from : ___ ', config.saved_model_path)
 else: # if no pre-trained network proceed with the main training loop.
     config.criterion_shuffle_paradigm = 0.90 # accuracy crit for shuffled paradigm to acheive so it matches the sequential paradigm.
-    testing_log, training_log, net = train(config, net, task_seq, testing_log, training_log , step_i = 0 )
+    ###############################################################################################################
+    old_no_latent_updates = config.no_latent_updates
+    config.no_latent_updates = 0
+    testing_log, training_log, net = train(config, net, task_seq * 3, testing_log, training_log , step_i = 0 )
+    config.no_latent_updates = old_no_latent_updates
+    randomly_ordered_task_seq = []
+    for _ in range(config.md_loop_rehearsals):
+        # randomly_ordered_task_seq +=  ((np.array(task_seq)[rng.permutation(range(len(task_seq)))]).tolist())
+        randomly_ordered_task_seq +=  task_seq
+    testing_log, training_log, net = train(config, net, randomly_ordered_task_seq, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
+    ###############################################################################################################
     config.criterion_shuffle_paradigm = 10 # raise it too high so it is no longer stopping training. 
        
     if config.train_novel_tasks and not config.higher_order: # run the novel task sequential test
 
         config.print_every_batches = 10
         config.train_to_criterion = True
-        config.max_trials_per_task = 10000
+        config.max_trials_per_task = int(100* config.batch_size)
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
    
         testing_log, training_log, net = train(config, net, task_seq_sequential, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
    
     else: # jump into random pre-training and save the net
-        testing_log, training_log, net = train(config, net, task_seq_random, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
+        pass
+        # testing_log, training_log, net = train(config, net, task_seq_random, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
 if config.save_model:
     print(' Saving RNN1 to: ----', config.saved_model_path)
     torch.save(net.state_dict(), config.saved_model_path)

@@ -169,6 +169,11 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
         ax.set_xlabel('Task order')
         ax.set_xlim([x0, x1])
         ax.set_ylim(0, filtered_mean.max()*1.5)
+    except:
+        pass
+    try:
+        ax.plot(training_log.switch_trialxxbatch,training_log.latents_to_crit, color='tab:red', label = 'latent updates')
+        ax.set_ylim(0, filtered_mean.max()*1.5)
         ax.legend()
     except:
         pass

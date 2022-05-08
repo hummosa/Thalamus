@@ -488,6 +488,46 @@ def test_model(model, test_inputs, test_outputs, step_i=0 ):
         plt.close('')
     return (model_preds, model_acts, acc)
 
+def get_tasks_order(seed):
+    tasks= [    'yang19.go-v0',
+                'yang19.rtgo-v0',
+                'yang19.dlygo-v0',
+                'yang19.dm1-v0',
+                'yang19.ctxdm1-v0',
+                'yang19.dms-v0',
+                'yang19.dmc-v0',
+                'yang19.dm2-v0',
+                'yang19.ctxdm2-v0',
+                'yang19.multidm-v0',
+                'yang19.rtanti-v0',
+                'yang19.anti-v0',
+                'yang19.dlyanti-v0',
+                'yang19.dnms-v0',
+                'yang19.dnmc-v0',
+                ] 
+    # choose opposite combos
+    GoFamily = ['yang19.dlygo-v0', 'yang19.go-v0', 'yang19.rtgo-v0']
+    AntiFamily = ['yang19.dlyanti-v0', 'yang19.anti-v0', 'yang19.rtanti-v0']
+    DM1family = [ 'yang19.dms-v0', 'yang19.dmc-v0','yang19.ctxdm1-v0',]
+    # 'yang19.dm1-v0', 'yang19.ctxdm1-v0', 'yang19.dm2-v0', 'yang19.ctxdm2-v0','yang19.multidm-v0'
+    DM2family = [  'yang19.dnms-v0', 'yang19.dnmc-v0', 'yang19.ctxdm2-v0',]
+    ### 2.1 two tasks
+    TaskA = GoFamily +  DM1family
+    TaskB = AntiFamily + DM2family
+    task_seqs = []
+    for a in range(len(GoFamily)):
+        task_seqs.append([GoFamily[a], AntiFamily[a]])
+        task_seqs.append([AntiFamily[a], GoFamily[a] ])
+        task_seqs.append([DM1family[a], DM2family[a]])
+        task_seqs.append([DM2family[a], DM1family[a]])
+
+    import random
+    task_seq = task_seqs[seed%len(task_seqs)] # choose one conflictual pairs
+    [random.shuffle(tasks) for _ in range(seed)] # then shuffle uniquely for each seed even if they have the same pair.
+    tasks = task_seq + [task for task in tasks if task not in task_seq] ## add all the other tasks shuffled
+    return(tasks)
+
+
 
 def get_logs_and_files(data_folder, exp_name, file_sig='testing_log', search_strs=[]):
     import os
