@@ -37,11 +37,12 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
     
-    if config.bu_adam:
-        bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-            lr=config.lr*config.lr_multiplier)
-    else:
-        bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier)
+    if not str(net.rnn) == 'GRU(33, 356)':
+        if config.bu_adam:
+            bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
+                lr=config.lr*config.lr_multiplier)
+        else:
+            bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
@@ -162,7 +163,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
                     # test_in_training(config, net, testing_log, training_log, step_i, envs)
                     bu_running_acc = 0
-                    recall_test_context_id, test_task_id = net.rnn.md_context_id.clone().detach().cpu().numpy(), task_id
+                    if not str(net.rnn) == 'GRU(33, 356)':
+                        recall_test_context_id, test_task_id = net.rnn.md_context_id.clone().detach().cpu().numpy(), task_id
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
 
 

@@ -27,7 +27,8 @@ import neurogym as ngym
 from neurogym.wrappers import ScheduleEnvs
 from neurogym.utils.scheduler import RandomSchedule
 # models
-from models.PFC_gated import RNN_MD
+# from models.PFC_gated import RNN_MD
+from models.PFC_gated import RNN_MD_GRU as RNN_MD
 # from models.GRUB import RNN_MD
 from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
@@ -56,7 +57,7 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=8, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=400, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
