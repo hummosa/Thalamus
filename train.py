@@ -98,7 +98,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             if ((running_acc-acc) > 0.2) and config.no_latent_updates: # assume some novel something happened
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
-                context_id = F.softmax(torch.from_numpy(context_id_after_lu), dim=1).to(config.device)
+                context_id = F.softmax(torch.from_numpy(context_id_after_lu * config.md_context_id_amplifier), dim=1).to(config.device)
             if (not (recall_test_context_id is None)) and config.test_latent_recall:
                 test_bu_running_acc, test_context_id_after_lu = latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, 
                 test_task_id=test_task_id, test_task_context=recall_test_context_id)
@@ -488,7 +488,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     return(testing_log, training_log, net)
 
 def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric):
-    bu_context_id = net.rnn.md_context_id    
+    
+    bu_context_id = net.rnn.md_context_id    * config.md_context_id_amplifier
     bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
     bu_context_id = bu_context_id.repeat([config.batch_size, 1])
     bu_context_id = bu_context_id.to(config.device)

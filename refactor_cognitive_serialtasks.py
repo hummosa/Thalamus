@@ -27,8 +27,8 @@ import neurogym as ngym
 from neurogym.wrappers import ScheduleEnvs
 from neurogym.utils.scheduler import RandomSchedule
 # models
-# from models.PFC_gated import RNN_MD
-from models.PFC_gated import RNN_MD_GRU as RNN_MD
+from models.PFC_gated import RNN_MD
+# from models.PFC_gated import RNN_MD_GRU as RNN_MD
 # from models.GRUB import RNN_MD
 from configs.refactored_configs import *
 from models.PFC_gated import Cognitive_Net
@@ -56,12 +56,12 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=8, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--seed', default=9, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=0.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var3',  default=2.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=2, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=3, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -125,6 +125,7 @@ config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.sa
 
 config.gates_divider = 1.0
 config.gates_offset = 0.0
+config.md_context_id_amplifier = float(args.var3)
 
 config.train_gates = False
 config.save_model = False
@@ -136,10 +137,10 @@ config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
 config.no_latent_updates = int(args.var1)
-config.actually_use_task_ids = bool(args.var3)
+config.actually_use_task_ids = False
 config.lr_multiplier = float(args.var4)
-config.bu_adam = False # SGD
-config.lr_multiplier = 100
+config.bu_adam = True # SGD
+config.lr_multiplier = 10 #100
 config.train_to_criterion = False
 config.max_trials_per_task = int(200 * config.batch_size)
 config.use_rehearsal = False

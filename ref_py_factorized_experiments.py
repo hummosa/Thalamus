@@ -20,7 +20,7 @@ experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #
 experiments = ['random_gates_mul']
 
 num_of_tasks_to_run = [3,5] # ,6,10] 
-exp_sig = 'cluster_pretrain_actual_opposites'
+exp_sig = 'cluster_pretrain_adam'
 
 Seeds = range(1,15)#[6, 7, 8, 10,  14, ]#range(11,15)
 Var1 = [0, 1000] # no of latent updates  #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
@@ -56,7 +56,7 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 05:40:00"
+    , "#SBATCH -t 01:40:00"
     , "#SBATCH --gres=gpu:1"
     # , "#SBATCH --constraint=high-capacity"
     # , "#SBATCH -p halassa"

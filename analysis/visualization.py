@@ -100,8 +100,8 @@ def plot_accuracies( config, training_log, testing_log):
 
 
 def plot_long_term_cluster_discovery( config, training_log, testing_log):
-    if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids
-    elif len(training_log.td_context_ids) > 0: context_ids =  training_log.td_context_ids
+    # if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids
+    if len(training_log.td_context_ids) > 0: context_ids =  training_log.td_context_ids
     elif len(training_log.md_context_ids) > 0: context_ids =  training_log.md_context_ids
     else: 
         policy_context_id = np.ones([1,config.md_size])/config.md_size
@@ -117,19 +117,19 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     switches=  training_log.switch_trialxxbatch[:] 
     # switches=  training_log.switch_trialxxbatch[1:] # earlier on I must have added zero as a switch trial 
 
-    fig, axes = plt.subplots(4,1, figsize=[12,6], sharex = False)
+    fig, axes = plt.subplots(3,1, figsize=[20/2.53,5], sharex = False)
 
     ax = axes[0]
-    # print(ax.get_position())
     # ax.set_position(mpl.transforms.Bbox([[0.125, 0.715], [.747, 0.880]]))
-    ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
+    ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1], linewidth=1)
     for ri in range(len(switches)-1):
         ax.axvspan(training_log.switch_trialxxbatch[ri], training_log.switch_trialxxbatch[ri]+1, color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.5)
         id = training_log.switch_task_id[ri]
         task_name = config.human_task_names[id]
-        ax.text(training_log.switch_trialxxbatch[ri], 1.0 + np.random.uniform(-0.1, 0.25), task_name, color= cmap.to_rgba(id) , fontsize=10)
+        ax.text(training_log.switch_trialxxbatch[ri], 1.0 + np.random.uniform(-0.1, 0.25), task_name, color= cmap.to_rgba(id) , fontsize=7)
     ax.set_ylabel('current task accuracy')
     ax.set_xlim([x0, x1])
+    # print('axis 0 position: ',ax.get_position())
     
     ax = axes[1] # context ids
     md = np.stack([m[0] for m in context_ids])
@@ -137,48 +137,46 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     im = sns.heatmap(md.T, cmap='Reds', ax = ax)#, vmax=md.max()/3)
     # print(fig.get_axes())
     # print('colorbar pos:', fig.get_axes()[-1].get_position())
-    fig.get_axes()[-1].set_position(mpl.transforms.Bbox([[0.9037,0.52],[.90785, 0.680]]))
+    fig.get_axes()[-1].set_position(mpl.transforms.Bbox([[0.9037,0.39],[.90785, 0.600]]))
     # ax.get_shared_x_axes().join(ax, axes[0])
-    ax.set_xticks(axes[0].get_xticks())
-    ax.set_xticklabels(axes[0].get_xticklabels())
-    ax.set_xlabel('Batches (100 trials)')
-    ax.set_ylabel('Task Rule vector')
-    
-    ax.set_position(mpl.transforms.Bbox([[0.125,0.52],[.942, 0.683]]))
+    ax.set_xticks(axes[0].get_xticks()[:-1])
+    ax.set_xticklabels(axes[0].get_xticklabels()[:-1], rotation=0)
+    # ax.set_xlabel('Batches (100 trials)')
+    ax.set_ylabel('Latent z vector')
+    ax.set_position(mpl.transforms.Bbox([[0.125,0.39],[.902, 0.613]]))
     # ax.set_position(mpl.transforms.Bbox([[0.125,0.52],[.99, 0.683]]))
     # print(ax.get_position())
 
     ax = axes[2] # mean_bu
-    ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
-    ax.set_xlim([x0, x1])
-    ax.set_ylabel('current task accuracy')
-    ax.set_xlabel('Batches (100 trials)')
-    # print(ax.get_position())
-    # =0.125, y0=0.32195652173913036, x1=0.9, y1=0.4860869565217391
-    ax.set_position(mpl.transforms.Bbox([[0.125,0.32],[.9, 0.45]]))
-
-    ax = axes[3]
+    # ax.plot(np.array(training_log.stamps)[x0:x1], np.array(training_log.accuracies)[x0:x1])
+    # ax.set_xlim([x0, x1])
+    # ax.set_ylabel('current task accuracy')
+    # ax.set_xlabel('Batches (100 trials)')
+    # # print(ax.get_position())
+    # # =0.125, y0=0.32195652173913036, x1=0.9, y1=0.4860869565217391
+    # ax.set_position(mpl.transforms.Bbox([[0.125,0.32],[.9, 0.45]]))
     # ax.plot(training_log.trials_to_crit, label = 'trials to crit')
+    ax.plot(training_log.switch_trialxxbatch, training_log.trials_to_crit, label = 'Weight updates', color='tab:blue', linewidth=1)
+    ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
+    filter=10
+    filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
+    ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'Weight updates avg', color='tab:orange',)
     try:
-        ax.plot(training_log.switch_trialxxbatch, training_log.trials_to_crit, label = 'trials to crit', color='tab:blue')
-        ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
-        filter=10
-        filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
-        ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'filtered {filter}', color='tab:orange')
-        ax.set_ylabel('Trials to criterion')
-        ax.set_xlabel('Task order')
-        ax.set_xlim([x0, x1])
-        ax.set_ylim(0, filtered_mean.max()*1.5)
+        mpl.rcParams['axes.spines.right'] = True
+        ax2 =  ax.twinx()
+        ax2.set_ylabel('Latent updates', color= 'tab:red') 
+        ax2.plot(training_log.switch_trialxxbatch,np.clip(np.array(training_log.latents_to_crit),0, a_max=1000), 'x',markersize=4,color='tab:red', label = 'Latent updates')
+        ax2.tick_params(axis='y', color='tab:red', labelcolor='tab:red')
+        mpl.rcParams['axes.spines.right'] = False
     except:
         pass
-    try:
-        ax.plot(training_log.switch_trialxxbatch,training_log.latents_to_crit, color='tab:red', label = 'latent updates')
-        ax.set_ylim(0, filtered_mean.max()*1.5)
-        ax.legend()
-    except:
-        pass
+    ax.set_ylabel('Weight updates to criterion')
+    ax.set_xlabel('Trials')
+    ax.set_xlim([x0, x1])
+    ax.set_ylim(0, 100)#filtered_mean.max()*1.5)
+    ax.legend()
     # print(ax.get_position())
-    ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.263]]))
+    ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.33]]))
     identifiers = 9
     plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 
