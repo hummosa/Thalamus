@@ -81,7 +81,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 config.train_to_criterion = True
                 config.use_weight_updates = False
                 training_log.converged_detected_at = step_i
-        lu_attempts = 5
+        lu_attempts = 2
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
@@ -109,6 +109,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     while( lu_attempts and (bu_running_acc < criterion_accuaracy -0.1)):
                         net.rnn.md_context_id.data = torch.rand_like(net.rnn.md_context_id.data) # resample randomly a new md embedding and try again.
                         bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                        print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
+                        print(f'attempts left: {lu_attempts}, bu_rnning_acc: {bu_running_acc}')
                         lu_attempts-=1
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
                 context_id = F.softmax(torch.from_numpy(context_id_after_lu * config.md_context_id_amplifier), dim=1).to(config.device)
@@ -209,7 +211,11 @@ def latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_runn
         bu_accs.append(bu_acc); latent_losses.append(latent_loss)
         bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
         if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
+            print(f'LU solved task at trial stamp: {training_log.stamps[-1]}')
             break
+        # if (total_latent_updates == int(config.no_latent_updates//2)): # if LUs are not getting anywhere, assume stuck, resample randomly a new md embedding and try again.
+        #     net.rnn.md_context_id.data = torch.rand_like(net.rnn.md_context_id.data) 
+        #     print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
     context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
     cb = context_id_before_loop.detach().cpu().numpy()
     print(f'MD update {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-cb)}')
@@ -515,7 +521,7 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     outputs, rnn_activity = net(inputs, sub_id=context_id)
     acc  = accuracy_metric(outputs.detach(), labels.detach())
     bu_optimizer.zero_grad()
-    loss = criterion(outputs, labels)
+    loss = criterion(outputs, labels) + 
     loss.backward()
     bu_optimizer.step()
     return (acc, loss.detach().cpu().numpy())
