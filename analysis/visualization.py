@@ -174,6 +174,8 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     ax.set_xlabel('Trials')
     ax.set_xlim([x0, x1])
     ax.set_ylim(0, 100)#filtered_mean.max()*1.5)
+    if hasattr(training_log, 'converged_detected_at'):
+        ax.axvline(training_log.converged_detected_at, color='tab:green', alpha=0.5, linewidth=2, label='Converged')
     ax.legend()
     # print(ax.get_position())
     ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.33]]))

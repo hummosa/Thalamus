@@ -8,11 +8,12 @@ import gym
 import neurogym as ngym
 
 
-def get_novel_task(args, rng, config):
+def get_novel_task_ids(args, rng, config):
     no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
     if no_of_tasks_left > 0: 
-        novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left)
-    return (novel_task_id)
+        novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left) # sample one task randomly. Not used at the moment.
+        novel_task_ids = list(range(args.num_of_tasks, len (config.tasks_id_name) ))
+    return (novel_task_ids)
 
 
 def test_in_training(net, dataset, config, log, trial_idx):
@@ -364,6 +365,7 @@ def get_tasks_order(seed):
         task_seqs.append([DM2family[a], DM1family[a]])
 
     import random
+    random.seed(seed)
     task_seq = task_seqs[seed%len(task_seqs)] # choose one conflictual pairs
     [random.shuffle(tasks) for _ in range(seed)] # then shuffle uniquely for each seed even if they have the same pair.
     tasks = task_seq + [task for task in tasks if task not in task_seq] ## add all the other tasks shuffled

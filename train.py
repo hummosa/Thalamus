@@ -54,6 +54,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         build_env(config, envs, task_id, task_name)
     running_acc = 0 # just to init
     bu_running_acc = 0
+    converged = False # flag used to detect when the model has converged
     recall_test_context_id, test_task_id = None, None # init these to use for testing latent recall
     training_log.recall_bu_accuracy, training_log.recall_latent_correlation = [], []
     
@@ -73,7 +74,14 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         # if len(training_log.trials_to_crit) > 5:
         #     for param_group in bu_optimizer.param_groups:
         #         param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
-
+        if config.detect_convergence and (len(training_log.trials_to_crit)> (config.num_of_tasks*2)):
+            recent_average_ttc = np.mean( np.stack(training_log.trials_to_crit[-config.num_of_tasks*2:]))
+            if recent_average_ttc < 2:
+                converged = True
+                config.train_to_criterion = True
+                config.use_weight_updates = False
+                training_log.converged_detected_at = step_i
+        lu_attempts = 5
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
@@ -95,8 +103,13 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
-            if ((running_acc-acc) > 0.2) and config.no_latent_updates: # assume some novel something happened
+            if ((running_acc-acc) > 0.2 or converged) and config.no_latent_updates: # assume some novel something happened
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                if converged and (bu_running_acc < criterion_accuaracy -0.1):
+                    while( lu_attempts and (bu_running_acc < criterion_accuaracy -0.1)):
+                        net.rnn.md_context_id.data = torch.rand_like(net.rnn.md_context_id.data) # resample randomly a new md embedding and try again.
+                        bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                        lu_attempts-=1
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
                 context_id = F.softmax(torch.from_numpy(context_id_after_lu * config.md_context_id_amplifier), dim=1).to(config.device)
             if (not (recall_test_context_id is None)) and config.test_latent_recall:
@@ -119,7 +132,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss = criterion(outputs, labels, use_loss=config.training_loss)
             loss.backward()
            
-            if not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already solved task
+            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.2)): # do not learn if optimzing rule input already solved task
                 optimizer.step()
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
@@ -175,9 +188,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 break
         #no more than number of blocks specified
         task_i +=1
-        training_log.sample_input = inputs[:,0,:].detach().cpu().numpy().T
-        training_log.sample_label = labels[:,0,:].detach().cpu().numpy().T
-        training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
+        # training_log.sample_input = inputs[:,0,:].detach().cpu().numpy().T
+        # training_log.sample_label = labels[:,0,:].detach().cpu().numpy().T
+        # training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
     testing_log.total_batches, training_log.total_batches = step_i, step_i
     try:
         plot_long_term_cluster_discovery(config, training_log, testing_log)
