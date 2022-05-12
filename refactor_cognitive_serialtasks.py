@@ -48,7 +48,8 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+# my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_mul', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
@@ -56,12 +57,12 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=5, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--seed', default=8, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=3, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--num_of_tasks', default=10, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -129,7 +130,7 @@ config.md_context_id_amplifier = float(args.var3)
 
 config.train_gates = False
 config.save_model = False
-config.save_model = True
+# config.save_model = True
 
 config.optimize_policy  = False
 config.optimize_td      = False
@@ -189,13 +190,19 @@ if config.load_saved_rnn1:
     net.load_state_dict(torch.load(config.saved_model_path))
     print('____ loading model from : ___ ', config.saved_model_path)
     # Train only LU to crit for testing purposes
-    third_phase_multiple = 30
-    task_seq3 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  * third_phase_multiple
+    third_phase_multiple = 2
+    # task_seq3 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  * third_phase_multiple
+    task_seq3 = [config.tasks_id_name[i] for i in novel_task_ids]  * third_phase_multiple
     config.train_to_criterion = True
     config.use_weight_updates = False
-    config.detect_convergence = True
-    config.max_trials_per_task = int(100*config.batch_size)
-    testing_log, training_log, net = train(config, net, task_seq3, testing_log, training_log , step_i = 0 )
+    config.detect_convergence = False
+    config.max_trials_per_task = int(400*config.batch_size)
+    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.md_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
+    cog_net.to(config.device)
+    testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = 0 )
+    exp_name = args.exp_name + '_testing'
+    config.exp_name = config.exp_name + '_testing'
+    os.makedirs('./files/'+exp_name, exist_ok=True)
 else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     # Training Phases
@@ -226,20 +233,13 @@ else: # if no pre-trained network proceed with the main training loop.
         torch.save(net.state_dict(), config.saved_model_path)
 
     ###############################################################################################################
-       
-    if config.train_novel_tasks and not config.higher_order: # run the novel task sequential test
-
+    if config.train_novel_tasks: # run the novel task sequential test
         config.print_every_batches = 10
         config.train_to_criterion = True
         config.max_trials_per_task = int(100* config.batch_size)
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
-   
-        # testing_log, training_log, net = train(config, net, task_seq_sequential, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
-   
-    else: # jump into random pre-training and save the net
-        pass
-        # testing_log, training_log, net = train(config, net, task_seq_random, testing_log, training_log, step_i = training_log.stamps[-1]+1 )
+       
 
 if config.higher_order:
     config.train_to_criterion = True
@@ -269,6 +269,9 @@ from analysis import visualization as viz
 
 # viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
 
-if config.higher_order and not config.optimize_policy:
-    viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+# if config.higher_order and not config.optimize_policy:
 viz.plot_long_term_cluster_discovery(config, training_log, testing_log)
+try:
+    viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+except:
+    pass

@@ -40,7 +40,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     if not str(net.rnn) == 'GRU(33, 356)':
         if config.bu_adam:
             bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-                lr=config.lr*config.lr_multiplier)
+                lr=config.lr*config.lr_multiplier, weight_decay=config.lr*config.lr_multiplier / 10)
+                # adding l2 reg (weeight decay) with an order of magnitude lower than lr.
         else:
             bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier)
         
@@ -76,11 +77,12 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         #         param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
         if config.detect_convergence and (len(training_log.trials_to_crit)> (config.num_of_tasks*2)):
             recent_average_ttc = np.mean( np.stack(training_log.trials_to_crit[-config.num_of_tasks*2:]))
-            if recent_average_ttc < 2:
+            if recent_average_ttc < 4:
                 converged = True
                 config.train_to_criterion = True
                 config.use_weight_updates = False
-                training_log.converged_detected_at = step_i
+                if not hasattr(training_log, 'converged_detected_at'):
+                    training_log.converged_detected_at = step_i
         lu_attempts = 2
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
@@ -321,7 +323,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
     policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
 
     bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
-    lr=config.lr*50)
+    lr=config.lr*50,
+    weight_decay=config.lr*0.1)
     # bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*30000)
 
     
@@ -521,7 +524,7 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     outputs, rnn_activity = net(inputs, sub_id=context_id)
     acc  = accuracy_metric(outputs.detach(), labels.detach())
     bu_optimizer.zero_grad()
-    loss = criterion(outputs, labels) + 
+    loss = criterion(outputs, labels) 
     loss.backward()
     bu_optimizer.step()
     return (acc, loss.detach().cpu().numpy())
