@@ -1,8 +1,5 @@
 
 import os
-import sys
-from models import MODES
-import gym
 
 '''
 Class names of configs are based on the class names of models:
@@ -11,41 +8,14 @@ Class names of configs are based on the class names of models:
 '''
 
 class BaseConfig(object):
-    def __init__(self, args= []):
+    def __init__(self, dataset= 'neurogym', args= []):
         # system
         self.device = 'cuda'
         self.ROOT_DIR = os.getcwd()
 
-
-        self.env_kwargs = {'dt': 100}
-        self.print_every_batches =  10
-        
-        import neurogym as ngym
-        # self.tasks = ngym.get_collection('yang19')
-        # This is the golden sequence, hand tuned curriculum to finish in the least no of trials
-        self._tasks= [
-                    'yang19.go-v0',
-                    'yang19.rtgo-v0',
-                    'yang19.dlygo-v0',
-                    'yang19.dm1-v0',
-                    'yang19.ctxdm1-v0',
-                    'yang19.dms-v0',
-                    'yang19.dmc-v0',
-                    'yang19.dm2-v0',
-                    'yang19.ctxdm2-v0',
-                    'yang19.multidm-v0',
-                    'yang19.rtanti-v0',
-                    'yang19.anti-v0',
-                    'yang19.dlyanti-v0',
-                    'yang19.dnms-v0',
-                    'yang19.dnmc-v0',
-                    ] 
-        # self._tasks += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
-        self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
-        self.tasks = self._tasks
-        # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
-        self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
-        self.num_of_tasks = len(self.tasks)
+   #########################################################
+        self.dataset= dataset
+        self.get_dataset_config(dataset)
 
 
         self.GoFamily = ['yang19.dlygo-v0', 'yang19.go-v0']
@@ -53,26 +23,27 @@ class BaseConfig(object):
         self.DMFamily = ['yang19.dm1-v0', 'yang19.dm2-v0', 'yang19.ctxdm1-v0', 'yang19.ctxdm2-v0', 'yang19.multidm-v0']
         self.DMFamily += ['yang19.dlydm1-v0', 'yang19.dlydm2-v0', 'yang19.ctxdlydm1-v0', 'yang19.ctxdlydm2-v0', 'yang19.multidlydm-v0']
         self.MatchFamily = ['yang19.dms-v0', 'yang19.dmc-v0', 'yang19.dnms-v0', 'yang19.dnmc-v0']
-        
+                
+        self._tasks_id_name = [(i, self.tasks[i]) for i in range(len(self.tasks))]
+        self.tasks = self._tasks
+        # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
+        self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
+        self.no_of_tasks = len(self.tasks)
         # MD
         self.MDeffect = False
         self.md_size = len(self.tasks)
         self.md_active_size = 2
         self.md_dt = 0.001
 
-        self.use_lstm = False
-
-        self.env_kwargs = {'dt': 100}
+        self.print_every_batches =  10
         self.batch_size = 100
 
         #  training paradigm
-        self.max_trials_per_task = 40000
+        self.max_trials_per_task = int(400 * self.batch_size)
         self.use_multiplicative_gates = True 
         self.use_additive_gates = False 
         self.train_to_criterion = True
-        self.criterion = 0.98
-        self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
-        self.criterion_DMfam = 0.86
+        self.use_rehearsal = False
         self.abort_rehearsal_if_accurate = False
         self.same_rnn = True
         self.no_shuffled_trials = 2700
@@ -82,12 +53,9 @@ class BaseConfig(object):
         self.one_batch_optimization = False  # Use only one batch to infer task rule input. 
         self.abort_rehearsal_if_accurate
         self.random_rehearsals = 0
-        # RNN model
-        self.input_size = 33
-        self.hidden_size = 356
-        self.output_size = 17
-        self.tau= 200
-        self.lr = 1e-3
+        self.use_latent_updates = True
+        self.use_weight_updates = True
+        self.max_no_of_latent_updates = 1000
 
         #gates statis
         self.train_gates = False
@@ -101,7 +69,6 @@ class BaseConfig(object):
         self.test_num_trials = 30
         self.plot_every_trials = 4000
         self.args= args
-
     
     ############################################
         self.save_trained_model = True
@@ -110,16 +77,69 @@ class BaseConfig(object):
         self.load_trained_cog_obs = False
         self.save_detailed = False
 
-        self.use_rehearsal = False
-        self.use_gates = False
-        self.load_gates_corr = False
-        self.use_cognitive_observer = False
-        self.use_CaiNet = False
+    def get_dataset_config(self, dataset):
+        if dataset == 'neurogym':
+            self.env_kwargs = {'dt': 100}
+            # This is the golden sequence, hand tuned curriculum to finish in the least no of trials
+            self._tasks= [
+                        'yang19.go-v0',
+                        'yang19.rtgo-v0',
+                        'yang19.dlygo-v0',
+                        'yang19.dm1-v0',
+                        'yang19.ctxdm1-v0',
+                        'yang19.dms-v0',
+                        'yang19.dmc-v0',
+                        'yang19.dm2-v0',
+                        'yang19.ctxdm2-v0',
+                        'yang19.multidm-v0',
+                        'yang19.rtanti-v0',
+                        'yang19.anti-v0',
+                        'yang19.dlyanti-v0',
+                        'yang19.dnms-v0',
+                        'yang19.dnmc-v0',
+                        ] 
+   
+            self.criterion_DMfam = 0.86
+            self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
+            self.criterion = 0.98
 
-        self.train_cog_obs_only = False
-        self.train_cog_obs_on_recent_trials = False
-        self.use_md_optimizer = False  
-        self.abandon_model = False
+            # RNN model
+            self.input_size = 33
+            self.hidden_size = 356
+            self.output_size = 17
+            self.tau= 200
+            self.lr = 1e-3
+
+        elif dataset == 'split_mnist':
+            self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
+
+            # RNN model
+            self.input_size = 28
+            self.hidden_size = 356
+            self.output_size = 2
+            self.tau= 200
+            self.lr = 1e-3
+
+            self.criterion_DMfam = 0.86
+            self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
+            self.criterion = 0.98
+
+        elif dataset == 'rotated_mnist':
+            self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 
+
+            # RNN model
+            self.input_size = 28
+            self.hidden_size = 356
+            self.output_size = 5
+            self.tau= 200
+            self.lr = 1e-3
+                    
+            self.criterion_DMfam = 0.86
+            self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
+            self.criterion = 0.98
+        else:
+            print('dataset not found!')
+
     ############################################   
     #  
     @property
@@ -156,8 +176,8 @@ class BaseConfig(object):
 
 #################### various experiments :
 class Gates_mul_config(BaseConfig):
-    def __init__(self, args= []):
-        super().__init__()
+    def __init__(self, dataset='neurogym', args= []):
+        super().__init__(dataset=dataset)
         self.same_rnn = True
         self.train_to_criterion = True
         self.use_rehearsal = True
@@ -166,43 +186,43 @@ class Gates_mul_config(BaseConfig):
         self.use_additive_gates = False
 
 class Gates_add_config(Gates_mul_config):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super().__init__()
         self.use_multiplicative_gates = False
         self.use_additive_gates = True
 
 class Shuffle_mul_config(Gates_mul_config):
-    def __init__(self, args= []):
-        super().__init__()
+    def __init__(self, dataset='neurogym',  args= []):
+        super(Shuffle_mul_config,self).__init__()
         self.train_to_plateau = False
         self.random_rehearsals = 300
         self.max_trials_per_task =     self.batch_size
         self.paradigm_shuffle = True
         self.paradigm_sequential = not     self.paradigm_shuffle
 class Shuffle_add_config(Shuffle_mul_config):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super(Shuffle_add_config, self).__init__()
         self.use_multiplicative_gates = False
         self.use_additive_gates = True
 
 class Gates_no_rehearsal_config(Gates_mul_config):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super(Gates_no_rehearsal_config, self).__init__()
         self.use_rehearsal = False
 class random_gates_only_config(Gates_mul_config):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super().__init__()
         self.use_rehearsal = False
         self.train_to_criterion = False
 class Gates_rehearsal_no_train_to_criterion_config(Gates_mul_config):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super().__init__()
         self.use_rehearsal = True
         self.train_to_criterion = False
 
 ############################################
 class SerialConfig(BaseConfig):
-    def __init__(self, args= []):
+    def __init__(self, dataset='neurogym',  args= []):
         super(SerialConfig, self).__init__()
         self.use_multiplicative_gates = False
         self.use_additive_gates = False 
@@ -235,7 +255,7 @@ class Schizophrenia_config(object):
         self.tasks = self._tasks
         # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
         self.human_task_names = self.tasks 
-        self.num_of_tasks = len(self.tasks)
+        self.no_of_tasks = len(self.tasks)
 
 
         self.GoFamily = ['yang19.dlygo-v0', 'yang19.go-v0']

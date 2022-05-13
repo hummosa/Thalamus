@@ -46,7 +46,7 @@ class BaseConfig(object):
         # self.tasks = self._tasks
         # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
-        self.num_of_tasks = len(self.tasks)
+        self.no_of_tasks = len(self.tasks)
 
 
         self.GoFamily = ['yang19.dlygo-v0', 'yang19.go-v0']
@@ -121,9 +121,9 @@ class BaseConfig(object):
         # save variables
         self.FILENAME = {
                         'config':    'config_PFCMD.npy',
-                        'log':       f'log_PFCMD_{self.num_of_tasks}.npy',
+                        'log':       f'log_PFCMD_{self.no_of_tasks}.npy',
                         'net':       'net_PFCMD.pt',
-                        'plot_perf': f'performance_PFCMD_tasks{self.num_of_tasks}.png',
+                        'plot_perf': f'performance_PFCMD_tasks{self.no_of_tasks}.png',
         }
 
     ############################################
@@ -152,10 +152,10 @@ class BaseConfig(object):
     def tasks(self,tasks):
         self._tasks = tasks
         self.tasks_id_name = tasks # uses the property setter below to rearrange tasks_id_name to the new order but keep consistent the task ids
-        self.num_of_tasks = len(tasks)
-        # self.total_trials = int(self.max_trials_per_task * (self.num_of_tasks + 1)) # 70000
-        self.sub_size = self.hidden_ctx_size//self.num_of_tasks # 150
-        self.md_size = self.num_of_tasks # 3
+        self.no_of_tasks = len(tasks)
+        # self.total_trials = int(self.max_trials_per_task * (self.no_of_tasks + 1)) # 70000
+        self.sub_size = self.hidden_ctx_size//self.no_of_tasks # 150
+        self.md_size = self.no_of_tasks # 3
 
 
     @property

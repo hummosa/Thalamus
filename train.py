@@ -9,7 +9,7 @@ from tqdm import tqdm, trange
 import gym
 import neurogym as ngym
 import matplotlib.pyplot as plt
-from utils import stats, get_trials_batch, get_performance, accuracy_metric, test_in_training
+from utils import *
 from Schizophrenia.tasks_coded_in_neurogym import *
 import utils
 
@@ -51,17 +51,21 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
 
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
-    for task_id, task_name in config.tasks_id_name:
-        build_env(config, envs, task_id, task_name)
+    build_env(config, envs)
     running_acc = 0 # just to init
     bu_running_acc = 0
     converged = False # flag used to detect when the model has converged
+    tasks_after_converged = config.no_of_tasks
     recall_test_context_id, test_task_id = None, None # init these to use for testing latent recall
     training_log.recall_bu_accuracy, training_log.recall_latent_correlation = [], []
     
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
+        if (converged):  # after converged. Run tasks one more juist for a demo and them move on
+            tasks_after_converged-=1
+            if tasks_after_converged == 0:
+                break
         #if the last task in shuffle training_ extend it to 400 trials
         task_id = int(task_id)
         env = envs[int(task_id)]
@@ -75,14 +79,19 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         # if len(training_log.trials_to_crit) > 5:
         #     for param_group in bu_optimizer.param_groups:
         #         param_group['lr'] = config.lr * (1+max(0., 50 - np.mean(training_log.trials_to_crit[-10:])))
-        if config.detect_convergence and (len(training_log.trials_to_crit)> (config.num_of_tasks*2)):
-            recent_average_ttc = np.mean( np.stack(training_log.trials_to_crit[-config.num_of_tasks*2:]))
-            if recent_average_ttc < 4:
+        if config.detect_convergence and (len(training_log.trials_to_crit)> (config.no_of_tasks*2)):
+            recent_average_ttc = np.mean( np.stack(training_log.trials_to_crit[-config.no_of_tasks*2:]))
+            if recent_average_ttc < int(1+ config.no_of_tasks /2):
                 converged = True
-                config.train_to_criterion = True
+                config.detect_convergence = False
+                # config.train_to_criterion = True
+                tn = (bar_tasks.total - bar_tasks.n)
+                run_more = min(tn, config.no_of_tasks * 2)
+                bar_tasks.update(tn-run_more) # run no_of_tasks  more tasks and stop.
                 config.use_weight_updates = False
                 if not hasattr(training_log, 'converged_detected_at'):
                     training_log.converged_detected_at = step_i
+                
         lu_attempts = 2
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
@@ -92,11 +101,13 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     if (i==0) and (testing_log.accuracies[-1][task_id]) > (criterion_accuaracy-0.05): # criterion with some leniency. Only check at the begning of this current task.
                         print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
                         break # stop training this task and jump to the next.
-            if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
-                context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
-            inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            if inputs.shape[1] < config.batch_size:
+                inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             inputs.refine_names('timestep', 'batch', 'input_dim')
             labels.refine_names('timestep', 'batch', 'output_dim')
+            if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
+                context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             ########################################################################
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             ########################################################################
@@ -105,8 +116,10 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
-            if ((running_acc-acc) > 0.2 or converged) and config.no_latent_updates: # assume some novel something happened
+            if ((running_acc-acc) > 0.2 or (converged and (bu_running_acc<(criterion_accuaracy-.1)))) and config.use_latent_updates: # assume some novel something happened
+                config.no_latent_updates = int(min(15 * len(training_log.trials_to_crit)-10, config.max_no_of_latent_updates))
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                ###############
                 if converged and (bu_running_acc < criterion_accuaracy -0.1):
                     while( lu_attempts and (bu_running_acc < criterion_accuaracy -0.1)):
                         net.rnn.md_context_id.data = torch.rand_like(net.rnn.md_context_id.data) # resample randomly a new md embedding and try again.
@@ -114,8 +127,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                         print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
                         print(f'attempts left: {lu_attempts}, bu_rnning_acc: {bu_running_acc}')
                         lu_attempts-=1
+                ################
+                
+
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
-                context_id = F.softmax(torch.from_numpy(context_id_after_lu * config.md_context_id_amplifier), dim=1).to(config.device)
+                context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu * config.md_context_id_amplifier), dim=1).to(config.device)
             if (not (recall_test_context_id is None)) and config.test_latent_recall:
                 test_bu_running_acc, test_context_id_after_lu = latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, 
                 test_task_id=test_task_id, test_task_context=recall_test_context_id)
@@ -207,6 +223,7 @@ def latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_runn
     
     context_id_before_loop = net.rnn.md_context_id.detach().clone()
     bubuffer, bu_accs, latent_losses = [], [], []
+    total_latent_updates = 0
     for total_latent_updates in range(config.no_latent_updates):
         bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
         bu_acc,latent_loss = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
@@ -220,91 +237,12 @@ def latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_runn
         #     print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
     context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
     cb = context_id_before_loop.detach().cpu().numpy()
-    print(f'MD update {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-cb)}')
+    print(f'MD updates: {total_latent_updates}: {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-cb)}')
 
     # if len(bubuffer) > 0:
         # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs, latent_losses)
     return bu_running_acc, context_id_after_loop, total_latent_updates
 
-def latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, test_task_id, test_task_context=None):
-    env = envs[int(test_task_id)]
-    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-    
-    ### Swap out the context the network has
-    context_id_before_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
-    net.rnn.md_context_id.data = torch.from_numpy(test_task_context).to(config.device)
-
-    bubuffer, bu_accs = [], []
-    for _ in range(config.no_latent_updates):
-        bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
-        bu_acc,_ = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
-        bu_accs.append(bu_acc)
-        bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
-        if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
-            break
-    # put back the context id for the ongoing training task
-    context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
-    net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
-    # net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
-
-    print(f'Deviation from previous context {test_task_context} by {(context_id_after_loop-test_task_context)}')
-    if len(bubuffer) > 0:
-        plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
-    return bu_running_acc, context_id_after_loop
-
-def test_in_training(config, net, testing_log, training_log, step_i, envs):
-    # torch.set_grad_enabled(False)
-    net.eval()
-    testing_log.stamps.append(step_i)
-    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-                # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
-
-    fix_perf, act_perf = get_performance(
-                    net,
-                    envs,
-                    context_ids=testing_context_ids,
-                    config = config,
-                    batch_size = config.test_num_trials,
-                    ) 
-                
-    testing_log.accuracies.append(act_perf)
-    try:
-        gradients_past = min(step_i-training_log.start_optimizing_at, config.print_every_batches) # to avoid np.stack gradients from training and optimization. They might be of different lengths
-        testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
-    except:
-        pass
-                # torch.set_grad_enabled(True)
-    net.train()
-
-def build_env(config, envs, task_id, task_name):
-    if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint', 'oddball1', 'oddball2', 'oddball3','oddball4',]:
-        params = {
-                'noisy_mean':       [0.05, 0, 0 , 0], 
-                'drifting_mean':    [0.05, 0.05, 0 , 0],
-                'oddball':          [0.05,  0.05, 0.1, 0],
-                'changepoint':      [0.05, 0.0, 0.0 , 0.1],
-                'oddball1':          [0.05,  0.05, 0.1, 0],
-                'oddball2':          [0.05,  0.05, 0.2, 0],
-                'oddball3':          [0.05,  0.05, 0.3, 0],
-                'oddball4':          [0.05,  0.05, 0.4, 0],
-            }
-        param= params[task_name]
-        envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
-    elif task_name in ['shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1',  'shrew_task_cxt2', 'st_hierarchical']:
-        if task_name == 'shrew_task_audition':
-            envs[task_id] = Shrew_task(dt =10, attend_to='audition')
-        if task_name == 'shrew_task_vision':
-            envs[task_id] = Shrew_task(dt =10, attend_to='vision')
-               
-        if task_name == 'shrew_task_cxt1':
-            envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=None)
-        if task_name == 'shrew_task_cxt2':
-            envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
-        if task_name == 'st_hierarchical':
-            envs[task_id] = Shrew_task_hierarchical()
-
-    else: # assume a neurogym yang19 task:
-        envs[task_id] = gym.make(task_name, **config.env_kwargs)
 
 def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  = 0):
 
@@ -338,8 +276,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
-    for task_id, task_name in config.tasks_id_name:
-        build_env(config, envs, task_id, task_name)
+    build_env(config, envs)
 
 
     # initialize buffer
@@ -360,6 +297,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
         training_log.switch_trialxxbatch.append(step_i)
         training_log.switch_task_id.append(task_id)
         training_log.trials_to_crit.append(0) #add a zero and increment it in the training loop.
+        training_log.latents_to_crit.append(0) #add a zero and increment it in the training loop.
         
         cognitive_loss = None
         running_frustration = 0
@@ -370,16 +308,15 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
             if config.one_batch_optimization and not config.one_batch_success:
                 if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
-                    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+                    inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             else:
-                inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+                inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
 
             if config.optimize_bu:
                 # context_id = torch.zeros([config.batch_size, config.md_size])
                 # context_id[:, torch.argmax(md_context_id, axis=1)] = 1. # Hard max
                 
-                bu_context_id = net.rnn.md_context_id    
-                bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
+                bu_context_id = net.latent_activation_function(net.rnn.md_context_id, dim=1)
                 bu_context_id = bu_context_id.repeat([config.batch_size, 1])
                 bu_context_id = bu_context_id.to(config.device)
                 bu_context_id.requires_grad_()
@@ -416,7 +353,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                     buffer_grads_targets_tensor= np.stack(buffer_grads_targets[1:]).repeat(config.batch_size, axis=1)
                     cognitive_loss = F.mse_loss(cpred, torch.from_numpy(buffer_grads_targets_tensor).to(config.device))
                     # td_context_id  = F.gumbel_softmax(cpred[-1], dim = 1) # will give 15 one_hot.
-                    td_context_id  = F.softmax(cpred[-1], dim = 1)  
+                    td_context_id  = net.latent_activation_function(cpred[-1], dim = 1)  
                 else:
                     td_context_id = torch.ones([config.batch_size,config.md_size])/config.md_size  
                     cognitive_loss = None  
@@ -476,7 +413,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
             training_log.write_basic(step_i, loss.item(), acc, task_id)
             training_log.gradients.append(np.array([torch.norm(p.grad).item() for p in net.parameters() if p.grad is not None]) )
-            if config.save_detailed or config.use_cognitive_observer:
+            if config.save_detailed:
                 training_log.write_detailed( rnn_activity= rnn_activity.detach().cpu().numpy().mean(0),
                 inputs=   [] ,# inputs.detach().cpu().numpy(),
                 outputs = outputs.detach().cpu().numpy()[-1, :, :],
@@ -486,8 +423,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
                 )
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
             # print statistics
-            if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                test_in_training(config, net, testing_log, training_log, step_i, envs)
+            # if step_i % config.print_every_batches == (config.print_every_batches - 1):
+                # test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
             # relax a little! Only optimizing context signal!
             criterion_accuaracy = config.criterion if task_name not in config.DMFamily else config.criterion_DMfam
@@ -496,8 +433,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
                 running_acc = 0.
-                if training_log.trials_to_crit[-1] == 0: # if no trial to crit recorded previously
-                    training_log.trials_to_crit[-1] = i # log the total trials spent on this current task
+                if training_log.latents_to_crit[-1] == 0: # if no trial to crit recorded previously
+                    training_log.latents_to_crit[-1] = i # log the total trials spent on this current task
                 # utils.plot_Nassar_task(envs[task_id], config, context_id=context_id, task_name=task_name, training_log=training_log, net=net )
                 if (config.train_to_criterion) or (i+1== config.max_trials_per_task//config.batch_size):
                     break # stop training current task if sufficient accuracy. Note placed here to allow at least one performance run before this is triggered.
@@ -512,7 +449,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric):
     
     bu_context_id = net.rnn.md_context_id    * config.md_context_id_amplifier
-    bu_context_id = F.softmax(bu_context_id.float(), dim=1 ) # /config.gates_divider
+    bu_context_id = net.latent_activation_function(bu_context_id.float(), dim=1 ) # /config.gates_divider 
     bu_context_id = bu_context_id.repeat([config.batch_size, 1])
     bu_context_id = bu_context_id.to(config.device)
     bu_context_id.requires_grad_()

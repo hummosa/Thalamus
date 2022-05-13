@@ -284,7 +284,7 @@ def plot_credit_assignment_inference( config, training_log, testing_log):
         d = training_log.stamps[-1]
         average_acc =[]
         taa = []
-        for logi in range(config.num_of_tasks):
+        for logi in range(config.no_of_tasks):
             taa.append([test_acc[logi] for test_acc in testing_log.accuracies])
         average_acc.append(np.stack(taa))
 

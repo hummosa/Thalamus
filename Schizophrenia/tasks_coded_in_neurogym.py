@@ -7,7 +7,7 @@ import neurogym as ngym
 import gym
 from neurogym import TrialEnv
 import sys; sys.path.insert(0, '.')
-from utils import stats
+# from utils import stats
 
 class NoiseyMean(TrialEnv):
     def __init__(self, mean_noise= 0.1, mean_drift = 0, odd_balls_prob = 0.0, change_point_prob = 0.0, trials_remaining = 5):

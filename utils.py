@@ -1,18 +1,25 @@
+from asyncore import loop
 import itertools
 import numpy as np
 import random
 import torch
 from torch.nn import init
 from torch.nn import functional as F
+from torch.utils.data import Dataset, DataLoader
+
+from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms.functional import rotate
+
 import gym
 import neurogym as ngym
-
+from Schizophrenia.tasks_coded_in_neurogym import *
+# from analysis.visualization import plot_cluster_discovery, plot_long_term_cluster_discovery
 
 def get_novel_task_ids(args, rng, config):
-    no_of_tasks_left = len(config.tasks_id_name)- args.num_of_tasks
+    no_of_tasks_left = len(config.tasks_id_name)- args.no_of_tasks
     if no_of_tasks_left > 0: 
-        novel_task_id = args.num_of_tasks + rng.integers(no_of_tasks_left) # sample one task randomly. Not used at the moment.
-        novel_task_ids = list(range(args.num_of_tasks, len (config.tasks_id_name) ))
+        novel_task_id = args.no_of_tasks + rng.integers(no_of_tasks_left) # sample one task randomly. Not used at the moment.
+        novel_task_ids = list(range(args.no_of_tasks, len (config.tasks_id_name) ))
     return (novel_task_ids)
 
 
@@ -77,7 +84,7 @@ def get_args_from_parser(my_parser):
                         default=0.1, nargs='?',
                         type=float,
                         help='std of the gates. mean assumed 1.')
-    my_parser.add_argument('--num_of_tasks',
+    my_parser.add_argument('--no_of_tasks',
                         default=30, nargs='?',
                         type=int,
                         help='number of tasks to train on')
@@ -149,12 +156,9 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
     action_accuracies = defaultdict()
     for (context_id, env) in (zip(context_ids, envs)):
         # import pdb; pdb.set_trace()
-        inputs, labels = get_trials_batch(env, batch_size, config, test_batch=True)
-        if config.use_lstm:
-            action_pred, _ = net(inputs, update_md= False) # shape [500, 10, 17]
-        else:
-            context_id_oh = F.one_hot(torch.tensor([context_id]* batch_size), config.md_size).type(torch.float)        
-            action_pred, _ = net(inputs, sub_id=(context_id_oh/config.gates_divider)+config.gates_offset) # shape [500, 10, 17]
+        inputs, labels,_ = get_trials_batch(env, batch_size, config, test_batch=True)
+        context_id_oh = F.one_hot(torch.tensor([context_id]* batch_size), config.md_size).type(torch.float)        
+        action_pred, _ = net(inputs, sub_id=(context_id_oh/config.gates_divider)+config.gates_offset) # shape [500, 10, 17]
         ap = torch.argmax(action_pred, -1) # shape ap [500, 10]
 
         gt = torch.argmax(labels, -1)
@@ -218,47 +222,58 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
     # check if only one env or several and ensure it is a list either way.
     if type(envs) is not type([]):
         envs = [envs]
-    # fetch and batch data
-    obs, gts, dts = [], [], []
-    for bi in range(batch_size):
-        env = envs[np.random.randint(0, len(envs))] # randomly choose one env to sample from, if more than one env is given
-        trial= env.new_trial()
-        ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
-        assert not np.any(np.isnan(ob))
-        obs.append(ob), gts.append(gt)
-        if return_dist_mean_for_Nassar_tasks:
-            dts.append(trial)
-    # Make trials of equal time length:
-    obs_lens = [len(o) for o in obs]
-    max_len = np.max(obs_lens)
-    for o in range(len(obs)):
-        while len(obs[o]) < max_len:
-            obs[o]= np.insert(obs[o], 0, obs[o][0], axis=0)
-#             import pdb; pdb.set_trace()
-    gts_lens = [len(o) for o in gts]
-    max_len = np.max(gts_lens)
-    for o in range(len(gts)):
-        while len(gts[o]) < max_len:
-            gts[o]= np.insert(gts[o], 0, gts[o][0], axis=0)
-    obs = np.stack(obs) # shape (batch_size, 32, 33)
-    gts = np.stack(gts) # shape (batch_size, 32)
-    # numpy -> torch
-    inputs = torch.from_numpy(obs).type(torch.float).to(config.device)
-    labels = torch.from_numpy(gts).type(torch.float).to(config.device)
-    # if shrew:
-    if hasattr(env, 'update_context') and not test_batch:
-        env.update_context()
-        # print(f'remaining: \t {env.trials_remaining}\t cxt: {env.current_context} ')
-        # print(env.switches)
-    # index -> one-hot vector
-    if labels.shape[-1] > 1:
-        labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float()  # Had to make it into integers for one_hot then turn it back to float.
-    else: #If Nassar task
-        labels = labels # Keeping as floats for Nassar tasks. No one-hot encoding. 
-    if return_dist_mean_for_Nassar_tasks:
-        return (inputs.permute([1,0,2]), labels.permute([1,0,2]), dts) # using time first [time, batch, input]
+    additional_data = None
+    if config.dataset in ['split_mnist', 'rotated_mnist']:
+        env = envs[0]
+        batch = next(env)
+        inputs, labels = batch
+        inputs.squeeze_()
+        zeros = torch.zeros([inputs.shape[0], inputs.shape[1], config.output_size]) # batch, time sequence, one-hot for 10 classes.
+        zeros[:, -1, :] = F.one_hot(labels,config.output_size)
+        labels = zeros
+
     else:
-        return (inputs.permute([1,0,2]), labels.permute([1,0,2])) # using time first [time, batch, input]
+        # fetch and batch data
+        obs, gts, dts = [], [], []
+        for bi in range(batch_size):
+            env = envs[np.random.randint(0, len(envs))] # randomly choose one env to sample from, if more than one env is given
+            trial= env.new_trial()
+            ob, gt = env.ob, env.gt # gt shape: (15,)  ob.shape: (15, 33)
+            assert not np.any(np.isnan(ob))
+            obs.append(ob), gts.append(gt)
+            if return_dist_mean_for_Nassar_tasks:
+                dts.append(trial)
+        # Make trials of equal time length:
+        obs_lens = [len(o) for o in obs]
+        max_len = np.max(obs_lens)
+        for o in range(len(obs)):
+            while len(obs[o]) < max_len:
+                obs[o]= np.insert(obs[o], 0, obs[o][0], axis=0)
+    #             import pdb; pdb.set_trace()
+        gts_lens = [len(o) for o in gts]
+        max_len = np.max(gts_lens)
+        for o in range(len(gts)):
+            while len(gts[o]) < max_len:
+                gts[o]= np.insert(gts[o], 0, gts[o][0], axis=0)
+        obs = np.stack(obs) # shape (batch_size, 32, 33)
+        gts = np.stack(gts) # shape (batch_size, 32)
+        # numpy -> torch
+        inputs = torch.from_numpy(obs).type(torch.float)
+        labels = torch.from_numpy(gts).type(torch.float)
+        # if shrew:
+        if hasattr(env, 'update_context') and not test_batch:
+            env.update_context()
+            # print(f'remaining: \t {env.trials_remaining}\t cxt: {env.current_context} ')
+            # print(env.switches)
+        # index -> one-hot vector
+        if labels.shape[-1] > 1:
+            labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float()  # Had to make it into integers for one_hot then turn it back to float.
+        else: #If Nassar task
+            labels = labels # Keeping as floats for Nassar tasks. No one-hot encoding. 
+    if return_dist_mean_for_Nassar_tasks:
+        return (inputs.permute([1,0,2]).to(config.device), labels.permute([1,0,2]).to(config.device), dts) # using time first [time, batch, input]
+    else:
+        return (inputs.permute([1,0,2]).to(config.device), labels.permute([1,0,2]).to(config.device), additional_data) # using time first [time, batch, input]
 
 
 # In[16]:
@@ -330,6 +345,164 @@ def test_model(model, test_inputs, test_outputs, step_i=0 ):
         plt.savefig(f'./files/cog_observer_sample_preds{step_i}.jpg')
         plt.close('')
     return (model_preds, model_acts, acc)
+
+def latent_recall_test(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, test_task_id, test_task_context=None):
+    env = envs[int(test_task_id)]
+    inputs, labels = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+    
+    ### Swap out the context the network has
+    context_id_before_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
+    net.rnn.md_context_id.data = torch.from_numpy(test_task_context).to(config.device)
+
+    bubuffer, bu_accs = [], []
+    for _ in range(config.no_latent_updates):
+        bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
+        bu_acc,_ = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
+        bu_accs.append(bu_acc)
+        bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
+        if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
+            break
+    # put back the context id for the ongoing training task
+    context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
+    net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
+    # net.rnn.md_context_id.data = torch.from_numpy(context_id_before_loop).to(config.device) # torch.cuda.FloatTensor()
+
+    print(f'Deviation from previous context {test_task_context} by {(context_id_after_loop-test_task_context)}')
+    # if len(bubuffer) > 0:
+        # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
+    return bu_running_acc, context_id_after_loop
+
+def test_in_training(config, net, testing_log, training_log, step_i, envs):
+    # torch.set_grad_enabled(False)
+    net.eval()
+    testing_log.stamps.append(step_i)
+    testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
+                # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
+
+    fix_perf, act_perf = get_performance(
+                    net,
+                    envs,
+                    context_ids=testing_context_ids,
+                    config = config,
+                    batch_size = config.test_num_trials,
+                    ) 
+                
+    testing_log.accuracies.append(act_perf)
+    try:
+        gradients_past = min(step_i-training_log.start_optimizing_at, config.print_every_batches) # to avoid np.stack gradients from training and optimization. They might be of different lengths
+        testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
+    except:
+        pass
+                # torch.set_grad_enabled(True)
+    net.train()
+
+
+class MyRotationTransform:
+    """Rotate by one of the given angles."""
+
+    def __init__(self, angle= 45):
+        self.angle = angle
+
+    def __call__(self, x):
+        return rotate(x, self.angle)
+
+class Rotated_mnist(Dataset):
+    """Rotated mnist dataset."""
+    def __init__(self, mnist_dataset, rotation_angle):
+        """
+        Args:
+                mnist datasets or subdatasets
+                angle: angle to apply rotation.
+        """
+        self.dataset = mnist_dataset
+        self.transform = MyRotationTransform(rotation_angle)
+    def __len__(self):
+        return len(self.dataset)
+    def __getitem__(self, idx):
+        img , label = self.dataset[idx]
+        timg = self.transform(img.reshape([1,1,28,28]) )
+        return (timg, label)
+            
+def cycle(iterable):
+    while True:
+        for x in iterable:
+            yield x
+
+
+def build_env(config, envs):
+    if config.dataset =='nassar':
+        for task_id, task_name in config.tasks_id_name:
+            if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint', 'oddball1', 'oddball2', 'oddball3','oddball4',]:
+                params = {
+                    'noisy_mean':       [0.05, 0, 0 , 0], 
+                    'drifting_mean':    [0.05, 0.05, 0 , 0],
+                    'oddball':          [0.05,  0.05, 0.1, 0],
+                    'changepoint':      [0.05, 0.0, 0.0 , 0.1],
+                    'oddball1':          [0.05,  0.05, 0.1, 0],
+                    'oddball2':          [0.05,  0.05, 0.2, 0],
+                    'oddball3':          [0.05,  0.05, 0.3, 0],
+                    'oddball4':          [0.05,  0.05, 0.4, 0],
+                }
+                param= params[task_name]
+                envs[task_id] =  NoiseyMean(mean_noise= param[0], mean_drift = param[1], odd_balls_prob = param[2], change_point_prob = param[3], safe_trials = 5)
+    if config.dataset =='hierarchical_reasoning':
+        for task_id, task_name in config.tasks_id_name:
+        
+            if task_name == 'shrew_task_audition':
+                envs[task_id] = Shrew_task(dt =10, attend_to='audition')
+            if task_name == 'shrew_task_vision':
+                envs[task_id] = Shrew_task(dt =10, attend_to='vision')
+                
+            if task_name == 'shrew_task_cxt1':
+                envs[task_id] = Shrew_task(dt =10, attend_to='either', no_of_coherent_cues=None)
+            if task_name == 'shrew_task_cxt2':
+                envs[task_id] = Shrew_task(dt =10, attend_to='either', context=2, no_of_coherent_cues=None)
+            if task_name == 'st_hierarchical':
+                envs[task_id] = Shrew_task_hierarchical()
+
+    if config.dataset == 'neurogym':
+        for task_id, task_name in config.tasks_id_name:
+    
+            from neurogym.envs.collections.yang19 import go, rtgo, dlygo, anti, rtanti, dlyanti, dm1, dm2, ctxdm1, ctxdm2, multidm, dlydm1, dlydm2,ctxdlydm1, ctxdlydm2, multidlydm, dms, dnms, dmc, dnmc
+            neurogym_tasks_dict= {
+                        'yang19.go-v0': go() ,
+                        'yang19.rtgo-v0': rtgo(),
+                        'yang19.dlygo-v0': dlygo(),
+                        'yang19.dm1-v0': dm1(),
+                        'yang19.ctxdm1-v0': ctxdm1(),
+                        'yang19.dms-v0': dms(),
+                        'yang19.dmc-v0': dmc(),
+                        'yang19.dm2-v0': dm2(),
+                        'yang19.ctxdm2-v0': ctxdm2(),
+                        'yang19.multidm-v0': multidm(),
+                        'yang19.rtanti-v0': rtanti(),
+                        'yang19.anti-v0': anti(),
+                        'yang19.dlyanti-v0': dlyanti(),
+                        'yang19.dnms-v0': dnms(),
+                        'yang19.dnmc-v0': dnmc(),
+                        } 
+            # envs[task_id] = gym.make(task_name, **config.env_kwargs)
+            envs[task_id] = neurogym_tasks_dict[task_name]
+    if config.dataset == 'split_mnist':
+        from continual_learning.data import get_multitask_experiment
+        # scenario = ['task', 'class']
+        print("\nPreparing the data...")
+        (train_datasets, test_datasets), data_config, classes_per_task = get_multitask_experiment(
+        name='splitMNIST', scenario='domain', tasks=5, 
+        verbose=True, exception=True , )
+        for task_id, task_name in config.tasks_id_name:
+            envs[task_id]= iter(cycle(DataLoader(dataset=train_datasets[task_id], batch_size=config.batch_size, shuffle=True, drop_last=True)))
+            
+    if config.dataset == 'rotated_mnist':
+        from continual_learning.data import get_multitask_experiment
+        # scenario = ['task', 'class']
+        print("\nPreparing the data...")
+        (train_datasets, test_datasets), data_config, classes_per_task = get_multitask_experiment(
+        name='splitMNIST', scenario='domain', tasks=2,          verbose=True, exception=True , )
+        for task_id, task_name in config.tasks_id_name:
+            # use the same one dataset with two digits to classify, but specifiy different rotations
+            rotated_dataset = Rotated_mnist(train_datasets[0], rotation_angle= int(task_name[-6:-3]))
+            envs[task_id]= iter(cycle(DataLoader(dataset=rotated_dataset, batch_size=config.batch_size, shuffle=True, drop_last=True)))
 
 def get_tasks_order(seed):
     tasks= [    'yang19.go-v0',

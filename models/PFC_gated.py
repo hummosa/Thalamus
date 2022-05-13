@@ -148,16 +148,22 @@ class RNN_MD(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-
         self.rnn = CTRNN_MD(config)
         self.drop_layer = nn.Dropout(p=0.05)
         self.fc = nn.Linear(config.hidden_size, config.output_size)
+        # self.latent_activation_function = self.normalized_activation
+        self.latent_activation_function = F.softmax
 
     def forward(self, x, sub_id):
         rnn_activity, _ = self.rnn(x, sub_id)
         rnn_activity = self.drop_layer(rnn_activity)
         out = self.fc(rnn_activity)
         return out, rnn_activity
+    def normalized_activation(self, logits, dim =1):
+        logits -=torch.min(logits)
+        normalized = logits / torch.norm(logits, p=1)
+        return(normalized)
+
 class RNN_MD_GRU(nn.Module):
     """GRU compariosn
     """

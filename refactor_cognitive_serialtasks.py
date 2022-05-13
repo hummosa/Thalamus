@@ -48,8 +48,8 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-# my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
-my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_mul', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+# my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_mul', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
@@ -57,12 +57,12 @@ my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_m
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=8, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--num_of_tasks', default=10, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--no_of_tasks', default=3, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -71,7 +71,9 @@ exp_name = args.exp_name
 os.makedirs('./files/'+exp_name, exist_ok=True)
 rng = np.random.default_rng(int(args.seed))
 
-config = SerialConfig()
+### Dataset
+dataset_name = 'neurogym' #'split_mnist'  'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
+config = SerialConfig(dataset_name) 
 
 config.use_multiplicative_gates = False
 config.use_additive_gates = False
@@ -84,30 +86,31 @@ if args.experiment_type == 'train_to_criterion': # demo ttc and introduce metric
         config.train_to_criterion = True
         config.use_rehearsal = False
 if args.experiment_type == 'random_gates_no_rehearsal': 
-    config = Gates_no_rehearsal_config()
+    config = Gates_no_rehearsal_config(dataset_name)
 if args.experiment_type == 'random_gates_only': 
-    config = random_gates_only_config()
+    config = random_gates_only_config(dataset_name)
 if args.experiment_type == 'random_gates_rehearsal_no_train_to_criterion': 
-    config = Gates_rehearsal_no_train_to_criterion_config()
+    config = Gates_rehearsal_no_train_to_criterion_config(dataset_name)
 
 if args.experiment_type == 'rehearsal':  # introduce first time learning vs subsequent rehearsals.
         config.same_rnn = True
         config.train_to_criterion = True
         config.use_rehearsal = True
 if args.experiment_type == 'random_gates_mul': 
-    config = Gates_mul_config()
+    # config = Gates_mul_config('split_mnist')
+    config = Gates_mul_config(dataset_name)
 if args.experiment_type == 'random_gates_add': 
-    config = Gates_add_config()
+    config = Gates_add_config(dataset_name)
 if args.experiment_type == 'random_gates_both': 
-    config = Gates_add_config()
+    config = Gates_add_config(dataset_name)
     config.use_multiplicative_gates =True  
 if args.experiment_type == 'shuffle_mul': 
-    config = Shuffle_mul_config()
+    config = Shuffle_mul_config(dataset_name)
 if args.experiment_type == 'shuffle_add': 
-    config = Shuffle_add_config()
+    config = Shuffle_add_config(dataset_name)
 if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean': 
     config = Schizophrenia_config(args.experiment_type)
-    args.num_of_tasks = len(config.tasks)
+    args.no_of_tasks = len(config.tasks)
     config.use_additive_gates = True
     config.use_multiplicative_gates = False
     config.switches = 20
@@ -119,8 +122,8 @@ if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean':
 ############################################
 config.set_strings( exp_name)
 config.exp_signature = f"{args.var1:1.1f}_{args.var3:1.1f}_{args.var4:1.1f}_"
-config.num_of_tasks = args.num_of_tasks
-config.saved_model_sig = f'seed{args.seed}_paradigm_{"shuf" if config.paradigm_shuffle else "seq"}_{"mul" if config.use_multiplicative_gates else "add"}_tasks_{config.num_of_tasks}_'
+config.no_of_tasks = args.no_of_tasks
+config.saved_model_sig = f'seed{args.seed}_{"mul" if config.use_multiplicative_gates else "add"}_tasks_{config.no_of_tasks}_{dataset_name}'
 config.exp_signature = config.saved_model_sig +  config.exp_signature #+ f'_{"corr" if config.load_gates_corr else "nocorr"}_{"co" if config.use_cognitive_observer else "noc"}_{"reh" if config.use_rehearsal else "noreh"}_{"tc" if config.train_to_criterion else "nc"}_{"mul" if config.use_multiplicative_gates else "add"}_{"gates" if config.use_gates else "nog"}'
 config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.saved_model_sig}.torch'
 
@@ -130,7 +133,7 @@ config.md_context_id_amplifier = float(args.var3)
 
 config.train_gates = False
 config.save_model = False
-# config.save_model = True
+config.save_model = True
 
 config.optimize_policy  = False
 config.optimize_td      = False
@@ -160,7 +163,7 @@ os.makedirs(ddir, exist_ok=True)
 
 config.test_latent_recall = False  # in the second block of training, repeatedly test recall of previous latents and ability to recover accuracy wiht latent updates as a function of weight updates on the next task.
 config.md_loop_rehearsals = 20 # Train the sequence of tasks for this many times
-config.train_novel_tasks = False  # then add a novel task, then the sequence again, and then the same novel task at the end. 
+config.train_novel_tasks = True  # then add a novel task, then the sequence again, and then the same novel task at the end. 
 config.higher_order = False # not config.save_model
 config.higher_cog_test_multiple = 2
 config.training_loss = 'mse'
@@ -176,9 +179,11 @@ config.load_saved_rnn1 = not config.save_model
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq
     #Shuffle tasks
-    # idx = rng.permutation(range(len(config.tasks)))
-    # new_order_tasks = ((np.array(config.tasks)[idx]).tolist())
-    new_order_tasks = get_tasks_order(args.seed) # make sure the first two are opposites and then shuffle the rest
+    if config.dataset == 'neurogym':
+        new_order_tasks = get_tasks_order(args.seed) # make sure the first two are opposites and then shuffle the rest
+    else:
+        idx = rng.permutation(range(len(config.tasks)))
+        new_order_tasks = ((np.array(config.tasks)[idx]).tolist())
     config.tasks = new_order_tasks # assigns the order to tasks_id_name but retains the standard task_id
 # main loop
 net = RNN_MD(config)
@@ -191,12 +196,12 @@ if config.load_saved_rnn1:
     print('____ loading model from : ___ ', config.saved_model_path)
     # Train only LU to crit for testing purposes
     third_phase_multiple = 2
-    # task_seq3 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  * third_phase_multiple
+    # task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
     task_seq3 = [config.tasks_id_name[i] for i in novel_task_ids]  * third_phase_multiple
     config.train_to_criterion = True
     config.use_weight_updates = False
     config.detect_convergence = False
-    config.max_trials_per_task = int(400*config.batch_size)
+    config.max_trials_per_task = int(200*config.batch_size)
     cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.md_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
     cog_net.to(config.device)
     testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = 0 )
@@ -207,22 +212,21 @@ else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     # Training Phases
     # Train with WU first
-    task_seq1 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  
+    first_phase_multiple = 2
+    task_seq1 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)] * first_phase_multiple
     config.train_to_criterion = False
-    original_no_latent_updates = config.no_latent_updates
-    config.no_latent_updates = 0
+    config.use_latent_updates = False
     testing_log, training_log, net = train(config, net, task_seq1 , testing_log, training_log , step_i = 0 )
-
 
     # Train with WU+LU but full blocks
     second_phase_multiple = 3
-    task_seq2 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  * second_phase_multiple
-    config.no_latent_updates = original_no_latent_updates
+    config.use_latent_updates = True
+    task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
     testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
 
     # Train with WU+LU Train to Crit
-    third_phase_multiple = 60
-    task_seq3 = [config.tasks_id_name[i] for i in range(args.num_of_tasks)]  * third_phase_multiple
+    third_phase_multiple = 20
+    task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
     config.train_to_criterion = False
     config.detect_convergence = True
     config.max_trials_per_task = int(100*config.batch_size)
@@ -234,11 +238,19 @@ else: # if no pre-trained network proceed with the main training loop.
 
     ###############################################################################################################
     if config.train_novel_tasks: # run the novel task sequential test
-        config.print_every_batches = 10
+        third_phase_multiple = 2
+        # task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
+        task_seq3 = [config.tasks_id_name[i] for i in novel_task_ids]  * third_phase_multiple
+        # random.perm
         config.train_to_criterion = True
-        config.max_trials_per_task = int(100* config.batch_size)
+        config.use_weight_updates = False
+        config.detect_convergence = False
+        config.max_trials_per_task = int(200*config.batch_size)
+        cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.md_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
+        cog_net.to(config.device)
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
+        testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = step_i )
        
 
 if config.higher_order:

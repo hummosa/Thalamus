@@ -19,12 +19,12 @@ experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #
 experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #  
 experiments = ['random_gates_mul']
 
-num_of_tasks_to_run = [ 8,10] 
-exp_sig = 'cluster_convergence4'
+no_of_tasks_to_run = [3,5, 8] 
+exp_sig = 'cluster_rotated_mnist'
 
 Seeds = range(1,10)#[6, 7, 8, 10,  14, ]#range(11,15)
 Var1 = [1000] # no of latent updates  #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
-Var2 = num_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
+Var2 = no_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
 Var3 = [1] # [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 Var4 = [1] # [(x/10) for x in range(0,6, 4)] #gates_sparsity  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
 
@@ -68,7 +68,7 @@ for jobi, par_set in enumerate(expVars):
     
     # args = ['-c "x%d=%g" ' % (i, par_set[i]) for i in range(len(par_set))]
     #                                   use_gates same_rnn train_to_critoeron
-    command_line = 'python refactor_cognitive_serialtasks.py  {} --seed={} --var1={} --var3={} --var4={} --experiment_type={} --num_of_tasks={}'\
+    command_line = 'python refactor_cognitive_serialtasks.py  {} --seed={} --var1={} --var3={} --var4={} --experiment_type={} --no_of_tasks={}'\
                                                     .format(exp_name, seed,  var1, var3, var4, experiment_type, var2) 
     win_command_line = command_line + ' --os=windows'
     
