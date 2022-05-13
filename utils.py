@@ -1,5 +1,7 @@
 from asyncore import loop
 import itertools
+from logging import exception, raiseExceptions
+from boto import config
 import numpy as np
 import random
 import torch
@@ -178,11 +180,17 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
 
 # In[5]:
 
-def accuracy_metric(outputs, labels):
+def accuracy_metric(outputs, labels, config=config):
     ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     gt = torch.argmax(labels, -1)
     if labels.shape[-1] > 1: # checking it is not the Nassar tasks
-        action_accuracy = (gt[-1,:] == ap[ -1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
+        if config.model == 'RNN':
+            action_accuracy = (gt[-1,:] == ap[ -1,:]).sum() / gt.shape[1] # take action as the argmax of the last time step
+        elif config.model == 'MLP':
+            action_accuracy = (gt[:] == ap[ :]).sum() / gt.shape[0] # take action as the argmax of the last time step
+        else:
+            raiseExceptions('Not implemented!')
+            
     else: # IF NASSAR tasks
         action_accuracy = ((abs(outputs - labels ) < 0.05).float()).mean()
     return(action_accuracy.detach().cpu().numpy())
@@ -227,9 +235,13 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
         env = envs[0]
         batch = next(env)
         inputs, labels = batch
-        inputs.squeeze_()
-        zeros = torch.zeros([inputs.shape[0], inputs.shape[1], config.output_size]) # batch, time sequence, one-hot for 10 classes.
-        zeros[:, -1, :] = F.one_hot(labels,config.output_size)
+        if config.model == 'RNN':
+            inputs.squeeze_().permute([1,0,2])
+            zeros = torch.zeros([inputs.shape[0], inputs.shape[1], config.output_size]) # batch, time sequence, one-hot for 10 classes.
+            zeros[:, -1, :] = F.one_hot(labels,config.output_size).permute([1,0,2])
+        elif config.model == 'MLP':
+            inputs.squeeze_()
+            zeros = F.one_hot(labels,config.output_size).float()
         labels = zeros
 
     else:
@@ -258,7 +270,7 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
         obs = np.stack(obs) # shape (batch_size, 32, 33)
         gts = np.stack(gts) # shape (batch_size, 32)
         # numpy -> torch
-        inputs = torch.from_numpy(obs).type(torch.float)
+        inputs = torch.from_numpy(obs).type(torch.float).permute([1,0,2])
         labels = torch.from_numpy(gts).type(torch.float)
         # if shrew:
         if hasattr(env, 'update_context') and not test_batch:
@@ -267,13 +279,13 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
             # print(env.switches)
         # index -> one-hot vector
         if labels.shape[-1] > 1:
-            labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float()  # Had to make it into integers for one_hot then turn it back to float.
+            labels = (F.one_hot(labels.type(torch.long), num_classes=config.output_size)).float().permute([1,0,2])  # Had to make it into integers for one_hot then turn it back to float.
         else: #If Nassar task
             labels = labels # Keeping as floats for Nassar tasks. No one-hot encoding. 
     if return_dist_mean_for_Nassar_tasks:
         return (inputs.permute([1,0,2]).to(config.device), labels.permute([1,0,2]).to(config.device), dts) # using time first [time, batch, input]
     else:
-        return (inputs.permute([1,0,2]).to(config.device), labels.permute([1,0,2]).to(config.device), additional_data) # using time first [time, batch, input]
+        return (inputs.to(config.device), labels.to(config.device), additional_data) # using time first [time, batch, input]
 
 
 # In[16]:

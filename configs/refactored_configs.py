@@ -35,7 +35,7 @@ class BaseConfig(object):
         self.md_active_size = 2
         self.md_dt = 0.001
 
-        self.print_every_batches =  10
+        self.print_every_batches =  200
         self.batch_size = 100
 
         #  training paradigm
@@ -104,6 +104,7 @@ class BaseConfig(object):
             self.criterion = 0.98
 
             # RNN model
+            self.model ='RNN'
             self.input_size = 33
             self.hidden_size = 356
             self.output_size = 17
@@ -114,15 +115,15 @@ class BaseConfig(object):
             self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
 
             # RNN model
-            self.input_size = 28
-            self.hidden_size = 356
+            self.model = 'MLP'
+            self.input_size = 28*28
+            self.hidden_size = 400
             self.output_size = 2
-            self.tau= 200
             self.lr = 1e-3
 
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
-            self.criterion = 0.98
+            self.criterion = 0.94
 
         elif dataset == 'rotated_mnist':
             self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 

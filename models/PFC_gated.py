@@ -136,6 +136,81 @@ class CTRNN_MD(nn.Module):
         output = torch.stack(output, dim=0)
         return output, hidden
 
+
+class MLP_MD(nn.Module):
+    """ An MLP that can take MD inputs.
+    Args:
+        input_size: Number of input neurons
+        hidden_sizes: Number of hidden neurons
+        sub_size: Number of subpopulation neurons
+    Inputs:
+        input: (seq_len, batch, input_size), network input
+        hidden: (batch, hidden_size), initial hidden activity
+    """
+
+    def __init__(self, config, dt=100, **kwargs):
+        super().__init__()
+        self.input_size =  config.input_size
+        self.hidden_size = config.hidden_size
+        self.output_size = config.output_size
+        self.md_size = config.md_size
+        self.use_multiplicative_gates = config.use_multiplicative_gates
+        self.use_additive_gates = config.use_additive_gates
+
+        self.device = config.device
+        self.g = .5 # Conductance for recurrents. Consider higher values for realistic richer RNN dynamics, at least initially.
+
+        if self.use_multiplicative_gates:
+            # Gaussian with sparsity gates
+            self.init_mul_gates = torch.empty((config.md_size, config.hidden_size, )) 
+            sparse_with_mean(self.init_mul_gates, config.gates_sparsity, config.gates_mean, config.gates_std)
+            self.init_mul_gates = torch.nn.functional.relu(self.init_mul_gates) #* config.gates_divider + config.gates_offset
+            self.register_parameter(name='mul_gates', param=torch.nn.Parameter(self.init_mul_gates))
+        if self.use_additive_gates:
+            self.init_add_gates = torch.zeros(size=(config.md_size, config.hidden_size, )) 
+            self.init_add_gates = torch.nn.init.xavier_uniform_(self.init_add_gates, gain=nn.init.calculate_gain('relu')).to(config.device).float()
+            self.register_parameter(name='add_gates', param=torch.nn.Parameter(self.init_add_gates))
+        self.register_parameter(name='md_context_id', param=torch.nn.Parameter(torch.ones([1,config.md_size])/config.md_size ))
+        self.md_context_id.retain_grad()
+        # sensory input layer
+        
+        self.input2h = nn.Linear(self.input_size, self.hidden_size)
+        self.h2h1 = nn.Linear(self.hidden_size, self.hidden_size)
+        # self.h2h2 = nn.Linear(self.hidden_size, self.hidden_size)
+
+    def forward(self, input, sub_id, hidden=None):
+        """Propogate input through the network."""
+        ## inputs are shaped [28, batch_size, 28] due to using sequence first for the rnn. 
+        local_batch_size,h, w = input.shape
+
+        x = input.reshape([local_batch_size, h*w ]) ## Flatten images
+        x = F.relu(self.input2h(x)) 
+        # x = F.relu(self.h2h2(x))
+
+        if self.use_multiplicative_gates:
+            batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
+            x_gated = torch.multiply( gates, x)
+        if self.use_additive_gates:
+            batch_sub_encoding = sub_id 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.add_gates)
+            x_gated = torch.add( gates, x)
+
+        x = F.relu(self.h2h1(x_gated))
+
+        if self.use_multiplicative_gates:
+            batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
+            x_gated = torch.multiply( gates, x)
+        if self.use_additive_gates:
+            batch_sub_encoding = sub_id 
+            gates = torch.matmul(batch_sub_encoding.to(self.device), self.add_gates)
+            x_gated = torch.add( gates, x)
+            
+        x = F.relu(x_gated)
+        return (x, 0)
+                
+
 class RNN_MD(nn.Module):
     """Recurrent network model.
     Args:
@@ -148,7 +223,10 @@ class RNN_MD(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.rnn = CTRNN_MD(config)
+        if config.model == 'RNN':
+            self.rnn = CTRNN_MD(config)    
+        elif config.model =='MLP':
+            self.rnn = MLP_MD(config)
         self.drop_layer = nn.Dropout(p=0.05)
         self.fc = nn.Linear(config.hidden_size, config.output_size)
         # self.latent_activation_function = self.normalized_activation
@@ -159,10 +237,12 @@ class RNN_MD(nn.Module):
         rnn_activity = self.drop_layer(rnn_activity)
         out = self.fc(rnn_activity)
         return out, rnn_activity
+
     def normalized_activation(self, logits, dim =1):
         logits -=torch.min(logits)
         normalized = logits / torch.norm(logits, p=1)
         return(normalized)
+
 
 class RNN_MD_GRU(nn.Module):
     """GRU compariosn

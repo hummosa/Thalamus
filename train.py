@@ -19,8 +19,11 @@ def criterion(output, labels, use_loss='nll'):    # criterion & optimizer
         loss = crit(output, labels)
     elif use_loss =='nll':
         crit = F.nll_loss
-        
-        loss = crit(torch.log_softmax(output[-1,...], dim = -1, dtype=torch.float), torch.argmax(labels[-1,...], dim=-1))
+        if output.ndim > 2:
+            loss = crit(torch.log_softmax(output[-1,...], dim = -1, dtype=torch.float), torch.argmax(labels[-1,...], dim=-1))
+        else:
+            loss = crit(torch.log_softmax(output, dim = -1, dtype=torch.float), torch.argmax(labels, dim=-1))
+
     return loss
 
 
@@ -35,7 +38,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         else:
             print('exluding: ', name)
     
-    optimizer = torch.optim.Adam(training_params, lr=config.lr)
+    
     
     if not str(net.rnn) == 'GRU(33, 356)':
         if config.bu_adam:
@@ -43,7 +46,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 lr=config.lr*config.lr_multiplier, weight_decay=config.lr*config.lr_multiplier / 10)
                 # adding l2 reg (weeight decay) with an order of magnitude lower than lr.
         else:
-            bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier)
+            bu_optimizer = torch.optim.SGD([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'],  lr=config.lr*config.lr_multiplier, momentum=0.95)
         
     # create non-informative uniform context_ID
     context_id = torch.ones([1,config.md_size])/config.md_size    
@@ -55,13 +58,16 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     running_acc = 0 # just to init
     bu_running_acc = 0
     converged = False # flag used to detect when the model has converged
-    tasks_after_converged = config.no_of_tasks
+    tasks_after_converged = int(config.no_of_tasks*2)
     recall_test_context_id, test_task_id = None, None # init these to use for testing latent recall
     training_log.recall_bu_accuracy, training_log.recall_latent_correlation = [], []
     
     task_i = 0
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
+        # optimizer = torch.optim.SGD(training_params, lr=config.lr*10, momentum=0.99)
+        optimizer = torch.optim.Adam(training_params, lr=config.lr)
+    
         if (converged):  # after converged. Run tasks one more juist for a demo and them move on
             tasks_after_converged-=1
             if tasks_after_converged == 0:
@@ -104,15 +110,15 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             if inputs.shape[1] < config.batch_size:
                 inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-            inputs.refine_names('timestep', 'batch', 'input_dim')
-            labels.refine_names('timestep', 'batch', 'output_dim')
+            # inputs.refine_names('timestep', 'batch', 'input_dim')
+            # labels.refine_names('timestep', 'batch', 'output_dim')
             if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
                 context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
             ########################################################################
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             ########################################################################
             # outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset, gt=labels)
-            acc  = accuracy_metric(outputs.detach(), labels.detach())
+            acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
@@ -182,7 +188,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
 
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                pass
+                plot_long_term_cluster_discovery(config, training_log, testing_log)
                 # test_in_training(config, net, testing_log, training_log, step_i, envs)
             step_i+=1
             
@@ -212,11 +218,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         # training_log.sample_label = labels[:,0,:].detach().cpu().numpy().T
         # training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
     testing_log.total_batches, training_log.total_batches = step_i, step_i
-    try:
-        plot_long_term_cluster_discovery(config, training_log, testing_log)
-        # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs)
-    except:
-        pass
+
     return(testing_log, training_log, net)
 
 def latent_updates(config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels):
@@ -375,10 +377,13 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             #     config.optimize_td * td_context_id + config.optimize_policy * policy_context_id 
             
             outputs, rnn_activity = net(inputs, sub_id=context_id)
-            acc  = accuracy_metric(outputs.detach(), labels.detach())
+            acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             
             buffer_acts.append(rnn_activity.detach().cpu().numpy().mean(0))
-            buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
+            if config.model =='RNN':
+                buffer_labels.append(labels.detach().cpu().numpy()[-1, :, :])
+            else:
+                buffer_labels.append(labels.detach().cpu().numpy())
             buffer_accuracies.append(acc)
             buffer_task_ids.append(task_id)
             if len(buffer_acts) > config.horizon: buffer_task_ids.pop(0); buffer_accuracies.pop(0); buffer_labels.pop(0); buffer_acts.pop(0)
@@ -459,9 +464,9 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     context_id.requires_grad_().retain_grad() #shape batch_size x Md_size
                         
     outputs, rnn_activity = net(inputs, sub_id=context_id)
-    acc  = accuracy_metric(outputs.detach(), labels.detach())
+    acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
     bu_optimizer.zero_grad()
-    loss = criterion(outputs, labels) 
+    loss = criterion(outputs, labels, config.training_loss) 
     loss.backward()
     bu_optimizer.step()
     return (acc, loss.detach().cpu().numpy())
