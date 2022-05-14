@@ -28,9 +28,9 @@ class BaseConfig(object):
         self.tasks = self._tasks
         # This is yyyyya protected property to maintain the task_id no associated with each task based on this "standard" ordering
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
-        self.no_of_tasks = len(self.tasks)
+        
         # MD
-        self.md_size = 10 #len(self.tasks)
+        self.md_size = len(self.tasks)
         self.md_active_size = 2
         self.md_dt = 0.001
 
@@ -56,6 +56,7 @@ class BaseConfig(object):
         self.use_latent_updates = True
         self.use_weight_updates = True
         self.max_no_of_latent_updates = 1000
+        self.no_latent_updates = 0
 
         #gates statis
         self.train_gates = False
@@ -66,7 +67,8 @@ class BaseConfig(object):
         self.MD2PFC_prob = 0.5
         # test & plot
         self.test_every_trials = 500
-        self.test_num_trials = 30
+        self.test_num_trials = self.batch_size
+        self.test_no_latent_updates = 400 
         self.plot_every_trials = 4000
         self.args= args
     
@@ -98,10 +100,10 @@ class BaseConfig(object):
                         'yang19.dnms-v0',
                         'yang19.dnmc-v0',
                         ] 
-   
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
             self.criterion = 0.98
+            self.converged_ttc_criterion = int(1+ len(self._tasks) /2)
 
             # RNN model
             self.model ='RNN'
@@ -113,7 +115,6 @@ class BaseConfig(object):
 
         elif dataset == 'split_mnist':
             self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
-
             # RNN model
             self.model = 'MLP'
             self.input_size = 28*28
@@ -124,6 +125,7 @@ class BaseConfig(object):
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
             self.criterion = 0.94
+            self.converged_ttc_criterion = int(2+ len(self._tasks))
 
         elif dataset == 'rotated_mnist':
             self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 

@@ -27,33 +27,6 @@ def get_novel_task_ids(args, rng, config):
     return (novel_task_ids)
 
 
-def test_in_training(net, dataset, config, log, trial_idx):
-    '''
-    Compute performances for every task in the given task sequence(config.task_seq).
-    '''
-    # turn on test mode
-    net.eval()
-    if hasattr(config, 'MDeffect'):
-        if config.MDeffect:
-            net.rnn.md.learn = False
-    # testing
-    with torch.no_grad():
-        log.stamps.append(trial_idx+1)
-        #   fixation & action performance
-        print('Performance')
-        for env_id in range(config.num_task):
-            fix_perf, act_perf, md_activity = get_full_performance(net=net, dataset=dataset, task_id=env_id, config=config)
-            log.fix_perfs[env_id].append(fix_perf)
-            log.act_perfs[env_id].append(act_perf)
-            log.md_activity[env_id].append(md_activity)
-            print('  fix performance, task {:d}, cycle {:d}: {:0.2f}'.format(env_id+1, trial_idx+1, fix_perf))
-            print('  act performance, task {:d}, cycle {:d}: {:0.2f}'.format(env_id+1, trial_idx+1, act_perf))
-    # back to train mode
-    net.train()
-    if hasattr(config, 'MDeffect'):
-        if config.MDeffect:
-            net.rnn.md.learn = True
-
 # Parse argunents passed to python file.:
 def get_args_from_parser(my_parser):
     my_parser.add_argument('exp_name',
@@ -180,9 +153,7 @@ def get_performance(net, envs, context_ids, config, batch_size=100):
         
     return((fixation_accuracies, action_accuracies))
 
-# In[5]:
-
-def accuracy_metric(outputs, labels, config=config):
+def accuracy_metric(outputs, labels, config):
     ap = torch.argmax(outputs, -1) # shape ap [500, 10]
     gt = torch.argmax(labels, -1)
     if labels.shape[-1] > 1: # checking it is not the Nassar tasks
@@ -393,7 +364,7 @@ def test_in_training(config, net, testing_log, training_log, step_i, envs):
     testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
                 # testing_context_ids_oh = [F.one_hot(torch.tensor([task_id]* config.test_num_trials), config.md_size).type(torch.float) for task_id in testing_context_ids]
 
-    fix_perf, act_perf = get_performance(
+    act_perf = get_performance(
                     net,
                     envs,
                     context_ids=testing_context_ids,
@@ -407,7 +378,6 @@ def test_in_training(config, net, testing_log, training_log, step_i, envs):
         testing_log.gradients.append(np.mean(np.stack(training_log.gradients[-gradients_past:]),axis=0))
     except:
         pass
-                # torch.set_grad_enabled(True)
     net.train()
 
 
@@ -580,3 +550,20 @@ def convert_train_to_test_idx(training_log, testing_log, training_idx):
     diff_arra = np.abs(np.array(testing_log.stamps) - test_idx)
     test_t_idx = np.argmin(diff_arra)
     return(test_t_idx)
+
+def load_simulation(data_folder, exp_name, seed, loops, task_rule, var4, no_of_tasks):
+    search_strs=[f'seed{seed}_', f'tasks_{no_of_tasks}_', f'{loops:3.1f}_{task_rule:1.1f}_{var4:1.1f}']
+    testing_logs, test_files = get_logs_and_files(data_folder, exp_name, file_sig='testing_log', search_strs=search_strs)
+    training_logs, train_files = get_logs_and_files(data_folder, exp_name, file_sig='training_log', search_strs=search_strs)
+    configs, config_files = get_logs_and_files(data_folder, exp_name, file_sig='config', search_strs=search_strs)
+    config_files
+    
+    if len(training_logs) > 0:
+        testing_log = testing_logs[0]
+        training_log = training_logs[0]
+        config = configs[0]
+        assert len(training_logs) == 1, 'more than one training_log found!'
+    else:
+        print( f'unable to load {search_strs}!')
+        testing_log, training_log, config = None, None, None        
+    return config,training_log,testing_log

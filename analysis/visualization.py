@@ -166,6 +166,7 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
         ax2 =  ax.twinx()
         ax2.set_ylabel('Latent updates', color= 'tab:red') 
         ax2.plot(training_log.switch_trialxxbatch,np.clip(np.array(training_log.latents_to_crit),0, a_max=1000), 'x',markersize=4,color='tab:red', label = 'Latent updates')
+        ax2.plot([la[0]for la in training_log.lu_stamps_acc_improve], np.stack([la[1]for la in training_log.lu_stamps_acc_improve])*1000, '.', color='tab:green')
         ax2.tick_params(axis='y', color='tab:red', labelcolor='tab:red')
         mpl.rcParams['axes.spines.right'] = False
     except:

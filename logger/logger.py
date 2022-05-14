@@ -35,6 +35,8 @@ class SerialLogger(object):
         self.switch_task_id = []
         self.trials_to_crit =[]
         self.latents_to_crit = []
+        self.lu_stamps_acc_improve = []
+        self.lrs = []
         self.gradients = []
         self.cog_obs_preds = []
         self.bu_context_ids = []
