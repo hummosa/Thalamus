@@ -22,6 +22,8 @@ def get_novel_task_ids(args, rng, config):
     if no_of_tasks_left > 0: 
         novel_task_id = args.no_of_tasks + rng.integers(no_of_tasks_left) # sample one task randomly. Not used at the moment.
         novel_task_ids = list(range(args.no_of_tasks, len (config.tasks_id_name) ))
+    else:
+        novel_task_ids = []
     return (novel_task_ids)
 
 

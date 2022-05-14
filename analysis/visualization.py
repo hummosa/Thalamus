@@ -160,8 +160,8 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     ax.plot(training_log.switch_trialxxbatch,training_log.trials_to_crit, 'o', markersize=4, color='tab:blue')
     filter=10
     filtered_mean = np.convolve(np.array(training_log.trials_to_crit), np.ones(filter)/filter, 'same')
-    ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'Weight updates avg', color='tab:orange',)
     try:
+        ax.plot(training_log.switch_trialxxbatch,filtered_mean, label=f'Weight updates avg', color='tab:orange',)
         mpl.rcParams['axes.spines.right'] = True
         ax2 =  ax.twinx()
         ax2.set_ylabel('Latent updates', color= 'tab:red') 

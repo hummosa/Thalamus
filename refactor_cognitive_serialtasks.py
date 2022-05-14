@@ -60,8 +60,8 @@ my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?
 my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
 my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
-my_parser.add_argument('--var4', default=0.1, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--var3',  default=1000.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--no_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
@@ -130,7 +130,7 @@ config.saved_model_path = './files/'+ config.exp_name+ f'/saved_model_{config.sa
 
 config.gates_divider = 1.0
 config.gates_offset = 0.0
-config.md_context_id_amplifier = float(args.var3)
+config.md_context_id_amplifier = 1.
 
 config.train_gates = False
 config.save_model = False
@@ -144,12 +144,13 @@ config.cog_net_hidden_size = 100
 config.max_no_of_latent_updates = int(args.var1)
 config.actually_use_task_ids = False
 config.lr_multiplier = float(args.var4)
+config.weight_decay_multiplier = float(args.var3)
 config.bu_adam = True # SGD
 config.use_weight_updates = True
 config.detect_convergence = False
 config.convergence_plan = 'save_and_present_novel'
 
-config.lr_multiplier = 10 #100
+# config.lr_multiplier = 10 #100
 config.train_to_criterion = False
 config.max_trials_per_task = int(200 * config.batch_size)
 config.use_rehearsal = False
@@ -224,6 +225,7 @@ else: # if no pre-trained network proceed with the main training loop.
     config.use_latent_updates = True
     task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
     testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
+    # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
 
     # Train with WU+LU Train to Crit
     third_phase_multiple = 20
@@ -238,7 +240,7 @@ else: # if no pre-trained network proceed with the main training loop.
         torch.save(net.state_dict(), config.saved_model_path)
 
     ###############################################################################################################
-    if config.train_novel_tasks: # run the novel task sequential test
+    if config.train_novel_tasks and (len(novel_task_ids) > 0): # run the novel task sequential test
         third_phase_multiple = 2
         # task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         task_seq3 = [config.tasks_id_name[i] for i in novel_task_ids]  * third_phase_multiple

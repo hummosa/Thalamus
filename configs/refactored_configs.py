@@ -30,12 +30,12 @@ class BaseConfig(object):
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
         self.no_of_tasks = len(self.tasks)
         # MD
-        self.MDeffect = False
-        self.md_size = len(self.tasks)
+        self.md_size = 10 #len(self.tasks)
         self.md_active_size = 2
         self.md_dt = 0.001
 
-        self.print_every_batches =  200
+        self.print_every_tasks =  5
+        self.print_every_batches =  100
         self.batch_size = 100
 
         #  training paradigm
@@ -188,13 +188,13 @@ class Gates_mul_config(BaseConfig):
 
 class Gates_add_config(Gates_mul_config):
     def __init__(self, dataset='neurogym',  args= []):
-        super().__init__()
+        super().__init__(dataset=dataset)
         self.use_multiplicative_gates = False
         self.use_additive_gates = True
 
 class Shuffle_mul_config(Gates_mul_config):
     def __init__(self, dataset='neurogym',  args= []):
-        super(Shuffle_mul_config,self).__init__()
+        super().__init__(dataset=dataset)
         self.train_to_plateau = False
         self.random_rehearsals = 300
         self.max_trials_per_task =     self.batch_size
@@ -202,17 +202,17 @@ class Shuffle_mul_config(Gates_mul_config):
         self.paradigm_sequential = not     self.paradigm_shuffle
 class Shuffle_add_config(Shuffle_mul_config):
     def __init__(self, dataset='neurogym',  args= []):
-        super(Shuffle_add_config, self).__init__()
+        super().__init__(dataset=dataset)
         self.use_multiplicative_gates = False
         self.use_additive_gates = True
 
 class Gates_no_rehearsal_config(Gates_mul_config):
     def __init__(self, dataset='neurogym',  args= []):
-        super(Gates_no_rehearsal_config, self).__init__()
+        super().__init__(dataset=dataset)
         self.use_rehearsal = False
 class random_gates_only_config(Gates_mul_config):
     def __init__(self, dataset='neurogym',  args= []):
-        super().__init__()
+        super().__init__(dataset=dataset)
         self.use_rehearsal = False
         self.train_to_criterion = False
 class Gates_rehearsal_no_train_to_criterion_config(Gates_mul_config):
@@ -224,7 +224,7 @@ class Gates_rehearsal_no_train_to_criterion_config(Gates_mul_config):
 ############################################
 class SerialConfig(BaseConfig):
     def __init__(self, dataset='neurogym',  args= []):
-        super(SerialConfig, self).__init__()
+        super().__init__(dataset=dataset)
         self.use_multiplicative_gates = False
         self.use_additive_gates = False 
         
