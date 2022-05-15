@@ -40,7 +40,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     
     
     optimizer = torch.optim.Adam(training_params, lr=config.lr)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 6,20, 30, 40, 50], gamma=0.9)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 10,20, 30, 40, 50], gamma=0.8)
     
     if not str(net.rnn) == 'GRU(33, 356)':
         if config.bu_adam:
@@ -109,7 +109,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                         print(f'task name: {task_name}, \t task ID: {task_id}\t skipped at accuracy: {testing_log.accuracies[-1][task_id]}')
                         break # stop training this task and jump to the next.
             inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
-            if inputs.shape[1] < config.batch_size:
+            if inputs.shape[0] < config.batch_size:
                 inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
             # inputs.refine_names('timestep', 'batch', 'input_dim')
             # labels.refine_names('timestep', 'batch', 'output_dim')
@@ -125,11 +125,12 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
             if ((running_acc-acc) > 0.2 ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
                 max_latent_updates = int(min(15 * len(training_log.trials_to_crit)-10, config.max_no_of_latent_updates))
+                # max_latent_updates = config.max_no_of_latent_updates
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(max_latent_updates, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
                 context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
                 training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
-                print(f'============== Latent update improvement: {training_log.lu_stamps_acc_improve[-1] }')
+                print(f'============== Latent update improvement: {training_log.lu_stamps_acc_improve[-1] } LU_acc: {bu_running_acc}   ACC {acc}')
                 ###############
             if converged and (bu_running_acc < criterion_accuaracy -0.1): #If converged, then tasks should be solved. If they are not, try to resample the latent for a number of attempts.
                 while( lu_attempts and (bu_running_acc < criterion_accuaracy -0.1)):
@@ -138,11 +139,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
                     print(f'attempts left: {lu_attempts}, bu_rnning_acc: {bu_running_acc}')
                     lu_attempts-=1
-                ################
-                training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
-                context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
-                training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
-                print(f'============  Latent update improvement: {training_log.lu_stamps_acc_improve[-1] }')
+                    ################
+                    training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
+                    context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
+                    training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
+                    print(f'============  Latent update improvement: {training_log.lu_stamps_acc_improve[-1] }')
                 
 
             if (not (recall_test_context_id is None)) and config.test_latent_recall:
@@ -165,7 +166,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss = criterion(outputs, labels, use_loss=config.training_loss)
             loss.backward()
            
-            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.2)): # do not learn if optimzing rule input already close enough to solving task
+            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already close enough to solving task
                 optimizer.step()
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
@@ -226,8 +227,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 break
         #no more than number of blocks specified
         task_i +=1
-        if len(training_log.trials_to_crit) % config.no_of_tasks == (config.no_of_tasks - 1):
-                scheduler.step() # lower learning rate every no of tasks learned.
+        if len(training_log.trials_to_crit) % config.no_of_tasks == (config.no_of_tasks - 1) and config.use_learning_rate_scheduler:
+            scheduler.step() # lower learning rate every no of tasks learned.
+            pass
         # training_log.sample_input = inputs[:,0,:].detach().cpu().numpy().T
         # training_log.sample_label = labels[:,0,:].detach().cpu().numpy().T
         # training_log.sample_output = outputs[:,0,:].detach().cpu().numpy().T
@@ -240,24 +242,28 @@ def latent_updates(max_latent_updates, config, net, testing_log, training_log, b
     context_id_before_loop = net.rnn.md_context_id.detach().clone()
     bubuffer, bu_accs, latent_losses = [], [], []
     total_latent_updates = 0
+    latents_to_criterion = 0
     for total_latent_updates in range(max_latent_updates):
         bubuffer.append(net.rnn.md_context_id.detach().clone().cpu().numpy())
         bu_acc,latent_loss = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
         bu_accs.append(bu_acc); latent_losses.append(latent_loss)
         bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
-        if bu_running_acc > (criterion_accuaracy-0.1): #stop optim if reached criter
-            print(f'LU solved task at trial stamp: {training_log.stamps[-1]}')
-            break
+        if bu_running_acc > (criterion_accuaracy-0.1) and (not (latents_to_criterion ==0)): #stop optim if reached criter
+            print(f'LU solved task at trial stamp: {training_log.stamps[-1]}',)
+            latents_to_criterion = total_latent_updates
+            # break
         # if (total_latent_updates == int(config.no_latent_updates//2)): # if LUs are not getting anywhere, assume stuck, resample randomly a new md embedding and try again.
         #     net.rnn.md_context_id.data = torch.rand_like(net.rnn.md_context_id.data) 
         #     print(f'resampling latent due to failure at trial stamp: {training_log.stamps[-1]}')
+    if (latents_to_criterion ==0): # if the solved question up there was not triggered, record the total usaed updates 
+        latents_to_criterion = total_latent_updates
     context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
     cb = context_id_before_loop.detach().cpu().numpy()
-    print(f'MD updates: {total_latent_updates}: {context_id_before_loop.detach().cpu().numpy()} by {(context_id_after_loop-cb)}')
+    print(f'MD updates: {total_latent_updates}: {cb} by {(context_id_after_loop-cb)}')
 
     # if len(bubuffer) > 0:
         # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs, latent_losses)
-    return bu_running_acc, context_id_after_loop, total_latent_updates
+    return bu_running_acc, context_id_after_loop, latents_to_criterion
 
 
 def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  = 0):

@@ -57,7 +57,9 @@ class BaseConfig(object):
         self.use_weight_updates = True
         self.max_no_of_latent_updates = 1000
         self.no_latent_updates = 0
+        self.use_learning_rate_scheduler = False
 
+        
         #gates statis
         self.train_gates = False
         self.gates_sparsity = 0.4
@@ -125,7 +127,7 @@ class BaseConfig(object):
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
             self.criterion = 0.94
-            self.converged_ttc_criterion = int(2+ len(self._tasks))
+            self.converged_ttc_criterion = int( 2)#len(self._tasks))
 
         elif dataset == 'rotated_mnist':
             self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 

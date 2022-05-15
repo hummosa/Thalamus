@@ -144,11 +144,10 @@ config.cog_net_hidden_size = 100
 config.max_no_of_latent_updates = int(args.var1)
 config.actually_use_task_ids = False
 config.lr_multiplier = float(args.var4)
-config.weight_decay_multiplier = float(args.var3)
+config.weight_decay_multiplier = float(args.var3) if not config.dataset == 'neurogym' else float(args.var3)/1000
 config.bu_adam = True # SGD
 config.use_weight_updates = True
 config.detect_convergence = False
-config.use_rehearsal = True
 config.convergence_plan = 'save_and_present_novel'
 
 # config.lr_multiplier = 10 #100
@@ -215,33 +214,34 @@ else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     if config.use_rehearsal:
         task_seq = []
-        rehearsal_multiple = 4
-        task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
+        rehearsal_multiple = [1,1,10,] # 1 2  1 2 3     1 2 3 4 
+        task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.no_of_tasks+1)] # interleave tasks and add one task at a time
         # probabilistic rehearsal where old tasks are rehearsed exponentially less frequent.
         # task_sub_seqs = [[config.tasks_id_name[i] for i in range(s) if np.random.uniform() < np.exp(-0.1*((s-i)+.3))+config.rehearsal_base_prob] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
-        for sub_seq in task_sub_seqs: 
-            task_seq+=sub_seq * rehearsal_multiple
+        config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(40*config.batch_size)
+        for i, sub_seq in enumerate(task_sub_seqs): 
+            task_seq+=sub_seq * rehearsal_multiple[i]
         task_seq+=sub_seq # One additional final rehearsal, 
         # task_seq+=sub_seq # yet another additional final rehearsal, 
         testing_log, training_log, net = train(config, net, task_seq , testing_log, training_log , step_i = 0 )
     else:
         # Training Phases
         # Train with WU first
-        first_phase_multiple = 1
+        first_phase_multiple = 2
         task_seq1 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)] * first_phase_multiple
         config.train_to_criterion = False
         config.use_latent_updates = False
         testing_log, training_log, net = train(config, net, task_seq1 , testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU but full blocks
-        second_phase_multiple = 1
+        second_phase_multiple = 2
         config.use_latent_updates = True
         task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
         testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
         # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU Train to Crit
-        third_phase_multiple = 20
+        third_phase_multiple = 30
         task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         config.train_to_criterion = False
         config.detect_convergence = True

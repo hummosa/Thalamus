@@ -19,8 +19,8 @@ experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #
 experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #  
 experiments = ['random_gates_mul']
 
-no_of_tasks_to_run = [3,4,5] 
-exp_sig = 'cluster_split_mnist_ironed'
+no_of_tasks_to_run = [4] 
+exp_sig = 'cluster_split_mnist_ironed2NoLR'
 
 Seeds = range(1,9)#[6, 7, 8, 10,  14, ]#range(11,15)
 Var1 = [1000] # no of latent updates  #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
