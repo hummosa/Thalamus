@@ -234,18 +234,18 @@ else: # if no pre-trained network proceed with the main training loop.
         testing_log, training_log, net = train(config, net, task_seq1 , testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU but full blocks
-        second_phase_multiple = 2
+        second_phase_multiple = 3
         config.use_latent_updates = True
         task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
         testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
         # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU Train to Crit
-        third_phase_multiple = 30
+        third_phase_multiple = 20
         task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         config.train_to_criterion = False
         config.detect_convergence = True
-        config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(40*config.batch_size)
+        config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(100*config.batch_size)
         testing_log, training_log, net = train(config, net, task_seq3, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
 
     if config.save_model:
