@@ -58,7 +58,7 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=1000, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=0.4, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1000.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
@@ -141,7 +141,8 @@ config.optimize_td      = False
 config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
-config.max_no_of_latent_updates = int(args.var1)
+config.max_no_of_latent_updates = 1000
+config.gates_sparsity = float(args.var1)
 config.actually_use_task_ids = False
 config.lr_multiplier = float(args.var4)
 config.weight_decay_multiplier = float(args.var3) if not config.dataset == 'neurogym' else float(args.var3)/1000
@@ -244,7 +245,8 @@ else: # if no pre-trained network proceed with the main training loop.
         third_phase_multiple = 20
         task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         config.train_to_criterion = False
-        config.detect_convergence = True
+        config.detect_convergence = False
+        config.accuracy_convergence = False
         config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(100*config.batch_size)
         testing_log, training_log, net = train(config, net, task_seq3, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
 
@@ -299,7 +301,8 @@ from analysis import visualization as viz
 
 # if config.higher_order and not config.optimize_policy:
 viz.plot_long_term_cluster_discovery(config, training_log, testing_log)
-try:
-    viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
-except:
-    pass
+# try:
+    # viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
+# except:
+    # pass
+viz.plot_thalamus_accuracies(config, training_log=training_log, testing_log=testing_log)

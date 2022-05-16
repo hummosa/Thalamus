@@ -22,6 +22,8 @@ import imageio
 from pygifsicle import optimize
 
 def plot_accuracies( config, training_log, testing_log):
+    
+    
     no_of_values = len(config.tasks)
     norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
     cmap_obj = mpl.cm.get_cmap('Set1') # tab20b tab20
@@ -96,6 +98,56 @@ def plot_accuracies( config, training_log, testing_log):
 
     final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
     identifiers = 9 # f'{training_log.stamps[-1]}_{final_accuracy_average:1.2f}'
+    plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{identifiers}.jpg', dpi=300)
+def plot_thalamus_accuracies( config, training_log, testing_log):
+        
+    no_of_values = len(config.tasks)+1
+    
+    norm = mpl.colors.Normalize(vmin=min([0,no_of_values]), vmax=max([0,no_of_values]))
+    cmap_obj = matplotlib.cm.get_cmap('Set1') # tab20b
+    cmap = mpl.cm.ScalarMappable(norm=norm, cmap=cmap_obj)
+
+    log = testing_log
+    # training_log.switch_trialxxbatch.append(training_log.stamps[-1])
+    switches = training_log.switch_trialxxbatch + [training_log.stamps[-1]]
+    num_tasks = len(config.tasks)
+    already_seen =[]
+    title_label = 'Training tasks sequentially ---> \n    ' + config.exp_name
+    if hasattr(training_log, 'start_optimizing_at'):
+            max_x = training_log.start_optimizing_at #training_log.switch_trialxxbatch[num_tasks] #* config.print_every_batches
+    else:
+            max_x = training_log.start_testing_at #training_log.switch_trialxxbatch[num_tasks] #* config.print_every_batches
+            # max_x = training_log.stamps[-1]
+    fig, axes = plt.subplots(num_tasks,1, figsize=[15/2.53,6.5/2.53])
+    for i, (tid, tn) in enumerate(config.tasks_id_name[:num_tasks]):
+            # print(f'currently plot i {i} tid: {tid}  and tn {tn} ')
+            ax = axes[ i ] # log i goes to the col direction -->
+            ax.set_ylim([-0.1,1.1])
+            ax.set_xlim([0, max_x])
+    #         ax.axis('off')
+            ax.plot(log.stamps, [test_acc[tid] for test_acc in log.accuracies], linewidth=1.5)
+            ax.plot(log.stamps, np.ones_like(log.stamps)*0.5, ':', color='grey', linewidth=1)
+            ax.set_ylabel(tn[7:-3], fontdict={'color': cmap.to_rgba(tid)})
+            for ri in range(len(training_log.switch_trialxxbatch)):
+                    ax.axvspan(switches[ri], switches[ri+1], color =cmap.to_rgba(training_log.switch_task_id[ri]) , alpha=0.2)
+            xtl = ax.get_xticklabels()
+            if not (i +1== num_tasks):        ax.set_xticklabels([])
+    for ti, id in enumerate(training_log.switch_task_id):
+        if id not in already_seen and (training_log.switch_trialxxbatch[ti] < max_x):
+            if len(already_seen) >= num_tasks: break # do not go beyond how many tasks are to be displayed
+            already_seen.append(id)
+            task_name = config.human_task_names[id]
+            # print(id)
+            task_name = config.human_task_names[id]
+            axes[0].text(training_log.switch_trialxxbatch[ti], 1.3, task_name, color= cmap.to_rgba(id) )
+    # axes[0].text(400, 1.7, 'Tasks being trained -->', color= 'black', fontsize=6 ,)
+    # axes[4].text(-0.1, 0.1, 'Accuracy on other tasks via latent updates', color= 'black', fontsize=6 ,rotation=90, transform=axes[4].transAxes)
+    axes[-1].set_xlabel('Trials (x100)')
+    final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
+    print('final avg acc', final_accuracy_average)
+        
+    final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
+    identifiers = f'{training_log.stamps[-1]}_{final_accuracy_average:1.2f}'
     plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{identifiers}.jpg', dpi=300)
 
 

@@ -1,6 +1,8 @@
 
 import os
 
+from sqlalchemy import false
+
 '''
 Class names of configs are based on the class names of models:
     Base -> BaseConfig
@@ -30,7 +32,7 @@ class BaseConfig(object):
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
         
         # MD
-        self.md_size = len(self.tasks)
+        self.md_size = 10 #len(self.tasks)
         self.md_active_size = 2
         self.md_dt = 0.001
 
@@ -57,8 +59,9 @@ class BaseConfig(object):
         self.use_weight_updates = True
         self.max_no_of_latent_updates = 1000
         self.no_latent_updates = 0
-        self.use_learning_rate_scheduler = False
-
+        self.use_learning_rate_scheduler = True
+        self.average_accuracy_criterion = 0.93
+        self.accuracy_convergence= False
         
         #gates statis
         self.train_gates = False
