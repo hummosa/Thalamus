@@ -122,9 +122,9 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
-            # if config.use_latent_updates: bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(1, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+            if config.use_latent_updates and config.use_latent_updates_every_trial: bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(1, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
-            if ((running_acc-acc) > 0.2 ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
+            if ((running_acc-acc) > 0.08 ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
                 max_latent_updates = int(min(15 * len(training_log.trials_to_crit)-10, config.max_no_of_latent_updates))
                 # max_latent_updates = config.max_no_of_latent_updates
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(max_latent_updates, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)

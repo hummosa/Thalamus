@@ -62,6 +62,7 @@ class BaseConfig(object):
         self.use_learning_rate_scheduler = True
         self.average_accuracy_criterion = 0.93
         self.accuracy_convergence= False
+        self.use_latent_updates_every_trial = False
         
         #gates statis
         self.train_gates = False

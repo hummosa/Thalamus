@@ -48,7 +48,7 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='cluster_3', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_mul', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
@@ -58,7 +58,7 @@ my_parser.add_argument('exp_name',  default='cluster_2', type=str, nargs='?', he
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0.4, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=0.8, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1000.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
@@ -154,7 +154,7 @@ config.convergence_plan = 'save_and_present_novel'
 # config.lr_multiplier = 10 #100
 config.train_to_criterion = False
 config.max_trials_per_task = int(200 * config.batch_size)
-config.use_rehearsal = False
+config.use_rehearsal = True
 
 ddir = './files/'+ config.exp_name + '/latent_updates'
 import shutil
@@ -215,11 +215,11 @@ else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     if config.use_rehearsal:
         task_seq = []
-        rehearsal_multiple = [1,1,10,] # 1 2  1 2 3     1 2 3 4 
+        rehearsal_multiple = [2,2,20,] # 1 2  1 2 3     1 2 3 4 
         task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.no_of_tasks+1)] # interleave tasks and add one task at a time
         # probabilistic rehearsal where old tasks are rehearsed exponentially less frequent.
         # task_sub_seqs = [[config.tasks_id_name[i] for i in range(s) if np.random.uniform() < np.exp(-0.1*((s-i)+.3))+config.rehearsal_base_prob] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
-        config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(40*config.batch_size)
+        config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(60*config.batch_size)
         for i, sub_seq in enumerate(task_sub_seqs): 
             task_seq+=sub_seq * rehearsal_multiple[i]
         task_seq+=sub_seq # One additional final rehearsal, 
@@ -237,6 +237,7 @@ else: # if no pre-trained network proceed with the main training loop.
         # Train with WU+LU but full blocks
         second_phase_multiple = 3
         config.use_latent_updates = True
+        config.use_latent_updates_every_trial = False
         task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
         testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
         # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
