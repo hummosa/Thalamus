@@ -167,7 +167,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss = criterion(outputs, labels, use_loss=config.training_loss)
             loss.backward()
            
-            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.08)): # do not learn if optimzing rule input already close enough to solving task
+            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already close enough to solving task
                 optimizer.step()
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)

@@ -19,8 +19,8 @@ experiments = ['shuffle_mul', 'random_gates_mul', 'random_gates_both',] #
 experiments = ['random_gates_add', 'random_gates_mul', 'random_gates_both',] #  
 experiments = ['random_gates_mul']
 
-no_of_tasks_to_run = [4] 
-exp_sig = 'cluster_split_mnist_sparsity_rehearsal'
+no_of_tasks_to_run = [5] 
+exp_sig = 'cluster_split_mnist_sparsity_rehearsal_5tasks_contextual'
 
 Seeds = list(range(0,20))#[6, 7, 8, 10,  14, ]#range(11,15)
 Var1 = [ 0.8] # no of latent updates  #[(x/10) for x in [10]]#range(5,14, 2)] # gates_mean  #0 1 add mul 
@@ -56,7 +56,7 @@ for jobi, par_set in enumerate(expVars):
     , "#  SBATCH CONFIG"
     , "#-------------------------------------------------------------------------------"
     , "#SBATCH --nodes=1"
-    , "#SBATCH -t 02:40:00"
+    , "#SBATCH -t 01:10:00"
     , "#SBATCH --gres=gpu:1"
     # , "#SBATCH --constraint=high-capacity"
     # , "#SBATCH -p halassa"
