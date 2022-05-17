@@ -115,9 +115,10 @@ def plot_thalamus_accuracies( config, training_log, testing_log):
     title_label = 'Training tasks sequentially ---> \n    ' + config.exp_name
     if hasattr(training_log, 'start_optimizing_at'):
             max_x = training_log.start_optimizing_at #training_log.switch_trialxxbatch[num_tasks] #* config.print_every_batches
-    else:
+    elif hasattr(training_log, 'start_testing_at'):
             max_x = training_log.start_testing_at #training_log.switch_trialxxbatch[num_tasks] #* config.print_every_batches
-            # max_x = training_log.stamps[-1]
+    else:
+        max_x = training_log.stamps[-1]
     fig, axes = plt.subplots(num_tasks,1, figsize=[15/2.53,6.5/2.53])
     for i, (tid, tn) in enumerate(config.tasks_id_name[:num_tasks]):
             # print(f'currently plot i {i} tid: {tid}  and tn {tn} ')

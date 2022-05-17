@@ -62,7 +62,7 @@ my_parser.add_argument('--var1',  default=0.8, nargs='?', type=float, help='no o
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=1000.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--no_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--no_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -215,7 +215,7 @@ else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     if config.use_rehearsal:
         task_seq = []
-        rehearsal_multiple = [2,2,20,] # 1 2  1 2 3     1 2 3 4 
+        rehearsal_multiple = [2,2,2,20] # 1 2  1 2 3     1 2 3 4 
         task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.no_of_tasks+1)] # interleave tasks and add one task at a time
         # probabilistic rehearsal where old tasks are rehearsed exponentially less frequent.
         # task_sub_seqs = [[config.tasks_id_name[i] for i in range(s) if np.random.uniform() < np.exp(-0.1*((s-i)+.3))+config.rehearsal_base_prob] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
