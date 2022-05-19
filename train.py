@@ -1,4 +1,5 @@
 from cmath import nan
+from sympy import Not
 import torch
 import numpy as np
 import torch.nn as nn
@@ -38,8 +39,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
         else:
             print('exluding: ', name)
     
-    
-    optimizer = torch.optim.Adam(training_params, lr=config.lr)
+    if config.WU_optimizer == 'Adam':
+        optimizer = torch.optim.Adam(training_params, lr=config.lr * config.WU_optimizer_lr_multiplier)
+    elif config.WU_optimizer == 'SGD':
+        optimizer = torch.optim.SGD(training_params, lr=config.lr * config.WU_optimizer_lr_multiplier, momentum=0.95)
+
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 10,20, 30, 40, 50], gamma=0.8)
     
     if not str(net.rnn) == 'GRU(33, 356)':
@@ -56,7 +60,8 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
 
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
-    build_env(config, envs)
+    testing_envs = [None] * len(config.tasks_id_name)
+    build_env(config, envs, testing_envs)
     running_acc = 0 # just to init
     bu_running_acc = 0
     converged = False # flag used to detect when the model has converged
@@ -68,7 +73,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
         # optimizer = torch.optim.SGD(training_params, lr=config.lr*10, momentum=0.99)
-    
+            
         if (converged):  # after converged. Run tasks one more juist for a demo and them move on
             tasks_after_converged-=1
             if tasks_after_converged == 0:
@@ -92,14 +97,13 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 converged = True
                 config.detect_convergence = False
                 # config.train_to_criterion = True
-                tn = (bar_tasks.total - bar_tasks.n)
+                tn = (bar_tasks.total - bar_tasks.n) # remaining tasks in the current sequence
                 run_more = min(tn, config.no_of_tasks * 2)
-                bar_tasks.update(tn-run_more) # run no_of_tasks  more tasks and stop.
+                bar_tasks.update(tn-run_more) # run no_of_tasks  more tasks and stop. This does not work, see tasks_after converged above doing the same function 
                 config.use_weight_updates = False
-                if not hasattr(training_log, 'converged_detected_at'):
-                    training_log.converged_detected_at = step_i
+                training_log.converged_detected_at = step_i
                 
-        lu_attempts = 5
+        lu_attempts = 2
         running_frustration = 0
         training_bar = trange(config.max_trials_per_task//config.batch_size)
         for i in training_bar:
@@ -124,7 +128,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # if acc is < running_acc by 0.2. run optim and get a new context_id
             if config.use_latent_updates and config.use_latent_updates_every_trial: bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(1, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
-            if ((running_acc-acc) > 0.08 ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
+            if ((running_acc-acc) > config.LU_trigger_threshold ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
                 max_latent_updates = int(min(15 * len(training_log.trials_to_crit)-10, config.max_no_of_latent_updates))
                 # max_latent_updates = config.max_no_of_latent_updates
                 bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(max_latent_updates, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
@@ -167,7 +171,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             loss = criterion(outputs, labels, use_loss=config.training_loss)
             loss.backward()
            
-            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-0.1)): # do not learn if optimzing rule input already close enough to solving task
+            if config.use_weight_updates and not (bu_running_acc > (criterion_accuaracy-config.WU_trigger_threshold)): # do not learn if optimzing rule input already close enough to solving task
                 optimizer.step()
             # from utils import show_input_output
             # show_input_output(inputs, labels, outputs)
@@ -199,9 +203,10 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
                 plot_long_term_cluster_discovery(config, training_log, testing_log)
                 # test_in_training(config, net, testing_log, training_log, step_i, envs)
-                latent_test_in_training(config,
+                if not config.dataset == 'neurogym':
+                    latent_test_in_training(config,
                     net, testing_log, training_log, bu_optimizer,
-                    bu_running_acc, criterion_accuaracy, envs, inputs, labels, step_i)
+                    bu_running_acc, criterion_accuaracy, envs, testing_envs, inputs, labels, step_i)
             
             training_log.lrs.append(optimizer.param_groups[0]["lr"])
             step_i+=1
@@ -249,7 +254,7 @@ def latent_updates(max_latent_updates, config, net, testing_log, training_log, b
         bu_acc,latent_loss = md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, labels, accuracy_metric)
         bu_accs.append(bu_acc); latent_losses.append(latent_loss)
         bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
-        if bu_running_acc > (criterion_accuaracy-0.1) and (not (latents_to_criterion ==0)): #stop optim if reached criter
+        if bu_running_acc > (criterion_accuaracy-0.1) and ((latents_to_criterion ==0)): #stop optim if reached criter
             print(f'LU solved task at trial stamp: {training_log.stamps[-1]}',)
             latents_to_criterion = total_latent_updates
             # break
@@ -260,7 +265,7 @@ def latent_updates(max_latent_updates, config, net, testing_log, training_log, b
         latents_to_criterion = total_latent_updates
     context_id_after_loop = net.rnn.md_context_id.detach().clone().cpu().numpy()
     cb = context_id_before_loop.detach().cpu().numpy()
-    print(f'MD updates: {total_latent_updates}: {cb} by {(context_id_after_loop-cb)}')
+    # print(f'MD updates: {total_latent_updates}: {cb} by {(context_id_after_loop-cb)}')
 
     # if len(bubuffer) > 0:
         # plot_cluster_discovery(config, bubuffer, training_log, testing_log, bu_accs, latent_losses)
@@ -306,7 +311,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
 
     # Make all tasks, but reorder them from the tasks_id_name list of tuples
     envs = [None] * len(config.tasks_id_name)
-    build_env(config, envs)
+    testing_envs = [None] * len(config.tasks_id_name)
+    build_env(config, envs, testing_envs)
 
 
     # initialize buffer
@@ -465,6 +471,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             
             if ((running_acc > criterion_accuaracy) ) or (i+1== config.max_trials_per_task//config.batch_size):
             # switch task if reached the max trials per task, and/or if train_to_criterion then when criterion reached
+                training_log.testing_accuracies.append(running_acc)
                 running_acc = 0.
                 if training_log.latents_to_crit[-1] == 0: # if no trial to crit recorded previously
                     training_log.latents_to_crit[-1] = i # log the total trials spent on this current task
@@ -520,7 +527,7 @@ def plot_context_id(config, bu_context_id, td_context_id, task_id, step_i = 0):
 
 def latent_test_in_training(config,
          net, testing_log, training_log, bu_optimizer,
-         bu_running_acc, criterion_accuaracy, envs, inputs, labels, step_i):
+         bu_running_acc, criterion_accuaracy, envs, testing_envs, inputs, labels, step_i):
     # torch.set_grad_enabled(False)
     # net.eval()
     testing_log.stamps.append(step_i)
@@ -532,7 +539,7 @@ def latent_test_in_training(config,
         ### Swap out the context the network has
     context_id_before_testing = net.rnn.md_context_id.detach().clone().cpu().numpy()
     testing_context_ids = list(range(len(envs)))  # envs are ordered by task id sequentially now.
-    for (context_id, env) in (zip(testing_context_ids, envs)):
+    for (context_id, env, testing_env) in (zip(testing_context_ids, envs, testing_envs)):
 
         test_task_context = torch.rand_like(net.rnn.md_context_id.data) # resample randomly
         net.rnn.md_context_id.data = test_task_context.to(config.device)
@@ -543,6 +550,9 @@ def latent_test_in_training(config,
          bu_running_acc, criterion_accuaracy, envs, inputs, labels)
         context_id_finalized = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
         
+        if config.dataset == 'split_mnist':
+            inputs, labels,_ = get_trials_batch(testing_env, config.test_num_trials, config, test_batch=True)
+            
         action_pred, _ = net(inputs, sub_id=(context_id_finalized)) # shape [500, 10, 17]
         
         ap = torch.argmax(action_pred, -1) # shape ap [500, 10]

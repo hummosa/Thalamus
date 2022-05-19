@@ -1,3 +1,6 @@
+from cmath import nan
+
+
 class BaseLogger(object):
     def __init__(self, config):
         self.losses = []
@@ -37,6 +40,7 @@ class SerialLogger(object):
         self.latents_to_crit = []
         self.lu_stamps_acc_improve = []
         self.lrs = []
+        self.testing_accuracies = []
         self.gradients = []
         self.cog_obs_preds = []
         self.bu_context_ids = []
@@ -44,7 +48,8 @@ class SerialLogger(object):
         self.md_context_ids = []
         self.md_grads = []
         self.task_ids = []
-
+        self.converged_detected_at = nan
+        
         for _ in range(len(config.tasks)):
             self.fix_perfs.append([])
             self.act_perfs.append([])

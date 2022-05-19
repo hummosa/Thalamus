@@ -32,12 +32,10 @@ class BaseConfig(object):
         self.human_task_names = ['{:<6}'.format(tn[7:-3]) for tn in self.tasks] #removes yang19 and -v0
         
         # MD
-        self.md_size = 10 #len(self.tasks)
+        
         self.md_active_size = 2
         self.md_dt = 0.001
 
-        self.print_every_tasks =  5
-        self.print_every_batches =  100
         self.batch_size = 100
 
         #  training paradigm
@@ -59,7 +57,7 @@ class BaseConfig(object):
         self.use_weight_updates = True
         self.max_no_of_latent_updates = 1000
         self.no_latent_updates = 0
-        self.use_learning_rate_scheduler = True
+        self.use_learning_rate_scheduler = False
         self.average_accuracy_criterion = 0.93
         self.accuracy_convergence= False
         self.use_latent_updates_every_trial = False
@@ -109,29 +107,46 @@ class BaseConfig(object):
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
             self.criterion = 0.98
-            self.converged_ttc_criterion = int(1+ len(self._tasks) /2)
-
+            self.converged_ttc_criterion = int(len(self._tasks) /3)
+            self.LU_trigger_threshold= 0.15
+            self.WU_trigger_threshold= 0.1
+            self.print_every_batches =  400
             # RNN model
+            self.md_size = len(self.tasks)
             self.model ='RNN'
             self.input_size = 33
             self.hidden_size = 356
             self.output_size = 17
             self.tau= 200
             self.lr = 1e-3
+            self.lr_multiplier = 10.0
+            self.weight_decay_multiplier = 1.0
+            self.WU_optimizer_lr_multiplier = 1.0
+            self.WU_optimizer = 'Adam' # 'SGD'
+            self.LU_optimizer = 'Adam'
 
         elif dataset == 'split_mnist':
             self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
             # RNN model
+            self.md_size = 10 #len(self.tasks)
             self.model = 'MLP'
             self.input_size = 28*28
             self.hidden_size = 400
             self.output_size = 2
             self.lr = 1e-3
+            self.lr_multiplier = 100.0
+            self.weight_decay_multiplier = 1000.0
+            self.WU_optimizer_lr_multiplier = 1.0
+            self.WU_optimizer = 'Adam' # 'SGD'
+            self.LU_optimizer = 'SGD' # 'Adam'
 
+            self.LU_trigger_threshold= 0.08
+            self.WU_trigger_threshold= 0.1
             self.criterion_DMfam = 0.86
             self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
             self.criterion = 0.94
             self.converged_ttc_criterion = int( 2)#len(self._tasks))
+            self.print_every_batches =  100
 
         elif dataset == 'rotated_mnist':
             self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 

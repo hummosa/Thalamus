@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
-use_PFCMD = False
 import os
 import sys
-
 root = os.getcwd()
 sys.path.append(root)
 sys.path.append('..')
@@ -58,11 +56,11 @@ my_parser.add_argument('exp_name',  default='cluster_3', type=str, nargs='?', he
 my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0.8, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=0.0, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=1000.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var3',  default=100.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--no_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--no_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -142,19 +140,20 @@ config.optimize_bu      = True
 config.cog_net_hidden_size = 100
 
 config.max_no_of_latent_updates = 1000
-config.gates_sparsity = float(args.var1)
-config.actually_use_task_ids = False
-config.lr_multiplier = float(args.var4)
-config.weight_decay_multiplier = float(args.var3) if not config.dataset == 'neurogym' else float(args.var3)/1000
-config.bu_adam = True # SGD
+config.gates_sparsity = 0.5 if config.dataset == 'neurogym' else 0.8
+config.actually_use_task_ids = bool(1-args.var4) if config.dataset == 'neurogym' else False
+config.LU_optimizer = 'SGD'  if config.dataset=='split_mnist' else True #  if False SGD 
+if config.dataset=='split_mnist': 
+    config.WU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
+    config.WU_optimizer_lr_multiplier = float(args.var3) 
 config.use_weight_updates = True
 config.detect_convergence = False
-config.convergence_plan = 'save_and_present_novel'
 
 # config.lr_multiplier = 10 #100
 config.train_to_criterion = False
 config.max_trials_per_task = int(200 * config.batch_size)
-config.use_rehearsal = True
+
+config.use_rehearsal = False if config.dataset == 'neurogym' else True 
 
 ddir = './files/'+ config.exp_name + '/latent_updates'
 import shutil
@@ -215,7 +214,7 @@ else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
     if config.use_rehearsal:
         task_seq = []
-        rehearsal_multiple = [2,2,2,20] # 1 2  1 2 3     1 2 3 4 
+        rehearsal_multiple = [2] * (config.no_of_tasks-2) + [20] # 1 2  1 2 3     1 2 3 4 
         task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.no_of_tasks+1)] # interleave tasks and add one task at a time
         # probabilistic rehearsal where old tasks are rehearsed exponentially less frequent.
         # task_sub_seqs = [[config.tasks_id_name[i] for i in range(s) if np.random.uniform() < np.exp(-0.1*((s-i)+.3))+config.rehearsal_base_prob] for s in range(2, args.num_of_tasks+1)] # interleave tasks and add one task at a time
@@ -236,17 +235,17 @@ else: # if no pre-trained network proceed with the main training loop.
 
         # Train with WU+LU but full blocks
         second_phase_multiple = 3
-        config.use_latent_updates = True
+        config.use_latent_updates = bool(args.var1) if config.dataset == 'neurogym' else True
         config.use_latent_updates_every_trial = False
         task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
         testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
         # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU Train to Crit
-        third_phase_multiple = 20
+        third_phase_multiple = 20 if not (args.no_of_tasks ==10) else 20
         task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         config.train_to_criterion = False
-        config.detect_convergence = False
+        config.detect_convergence = False if not (args.no_of_tasks ==10) else True
         config.accuracy_convergence = False
         config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(100*config.batch_size)
         testing_log, training_log, net = train(config, net, task_seq3, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
@@ -261,7 +260,8 @@ else: # if no pre-trained network proceed with the main training loop.
         # task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         task_seq3 = [config.tasks_id_name[i] for i in novel_task_ids]  * third_phase_multiple
         # random.perm
-        config.train_to_criterion = True
+        config.actually_use_task_ids =  False
+        config.train_to_criterion = False
         config.use_weight_updates = False
         config.detect_convergence = False
         config.max_trials_per_task = int(200*config.batch_size)
@@ -306,4 +306,5 @@ viz.plot_long_term_cluster_discovery(config, training_log, testing_log)
     # viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)
 # except:
     # pass
-viz.plot_thalamus_accuracies(config, training_log=training_log, testing_log=testing_log)
+if config.dataset == 'split_mnist':
+    viz.plot_thalamus_accuracies(config, training_log=training_log, testing_log=testing_log)

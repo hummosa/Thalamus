@@ -201,11 +201,9 @@ def plot_Nassar_task(env, config, context_id, task_name, training_log, net):
 
 def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks=False, test_batch=False):
     # check if only one env or several and ensure it is a list either way.
-    if type(envs) is not type([]):
-        envs = [envs]
     additional_data = None
     if config.dataset in ['split_mnist', 'rotated_mnist']:
-        env = envs[0]
+        env = envs
         batch = next(env)
         inputs, labels = batch
         if config.model == 'RNN':
@@ -216,8 +214,9 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
             inputs.squeeze_()
             zeros = F.one_hot(labels,config.output_size).float()
         labels = zeros
-
-    else:
+    else: # Otherscd
+        if type(envs) is not type([]):
+            envs = [envs]
         # fetch and batch data
         obs, gts, dts = [], [], []
         for bi in range(batch_size):
@@ -413,7 +412,7 @@ def cycle(iterable):
             yield x
 
 
-def build_env(config, envs):
+def build_env(config, envs, testing_envs=None):
     if config.dataset =='nassar':
         for task_id, task_name in config.tasks_id_name:
             if task_name in ['noisy_mean', 'drifting_mean', 'oddball', 'changepoint', 'oddball1', 'oddball2', 'oddball3','oddball4',]:
@@ -476,7 +475,10 @@ def build_env(config, envs):
         verbose=True, exception=True , )
         for task_id, task_name in config.tasks_id_name:
             envs[task_id]= iter(cycle(DataLoader(dataset=train_datasets[task_id], batch_size=config.batch_size, shuffle=True, drop_last=True)))
-            
+        assert (testing_envs is not None)
+        for task_id, task_name in config.tasks_id_name:
+            testing_envs[task_id]= iter(cycle(DataLoader(dataset=test_datasets[task_id], batch_size=config.batch_size, shuffle=True, drop_last=True)))
+
     if config.dataset == 'rotated_mnist':
         from continual_learning.data import get_multitask_experiment
         # scenario = ['task', 'class']
@@ -551,8 +553,8 @@ def convert_train_to_test_idx(training_log, testing_log, training_idx):
     test_t_idx = np.argmin(diff_arra)
     return(test_t_idx)
 
-def load_simulation(data_folder, exp_name, seed, loops, task_rule, var4, no_of_tasks):
-    search_strs=[f'seed{seed}_', f'tasks_{no_of_tasks}_', f'{loops:3.1f}_{task_rule:1.1f}_{var4:1.1f}']
+def load_simulation(data_folder, exp_name, seed, var1, var3, var4, no_of_tasks, dataset):
+    search_strs=[f'seed{seed}_', f'tasks_{no_of_tasks}_',dataset, f'_{var1:3.1f}_{var3:1.1f}_{var4:1.1f}']
     testing_logs, test_files = get_logs_and_files(data_folder, exp_name, file_sig='testing_log', search_strs=search_strs)
     training_logs, train_files = get_logs_and_files(data_folder, exp_name, file_sig='training_log', search_strs=search_strs)
     configs, config_files = get_logs_and_files(data_folder, exp_name, file_sig='config', search_strs=search_strs)

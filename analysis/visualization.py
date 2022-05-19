@@ -42,7 +42,7 @@ def plot_accuracies( config, training_log, testing_log):
     #         ax.axis('off')
             ax.plot(testing_log.stamps, [test_acc[logi] for test_acc in testing_log.accuracies], linewidth=1)
             ax.plot(testing_log.stamps, np.ones_like(testing_log.stamps)*0.5, ':', color='grey', linewidth=1)
-            ax.set_ylabel(config.human_task_names[logi], fontdict={'color': cmap.to_rgba(logi)})
+            ax.set_ylabel(config.human_task_names[logi].replace('class', 'Task '), fontdict={'color': cmap.to_rgba(logi)})
             ax.set_xlim([0, max_x])
             if (logi == num_tasks-1) and config.use_cognitive_observer and config.train_cog_obs_on_recent_trials: # the last subplot, put the preds from cog_obx
                 cop = np.stack(training_log.cog_obs_preds).reshape([-1,100,15])
@@ -56,7 +56,7 @@ def plot_accuracies( config, training_log, testing_log):
         if id not in already_seen:
             already_seen.append(id)
             task_name = config.human_task_names[id]
-            axes[0].text(training_log.switch_trialxxbatch[ti], 1.3, task_name, color= cmap.to_rgba(id) )
+            axes[0].text(training_log.switch_trialxxbatch[ti], 1.3, task_name.replace('class', 'Task '), color= cmap.to_rgba(id) )
 
     lens = [len(tg) for tg in training_log.gradients]
     m = min(lens)
