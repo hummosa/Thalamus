@@ -142,7 +142,7 @@ config.cog_net_hidden_size = 100
 config.max_no_of_latent_updates = 1000
 config.gates_sparsity = 0.5 if config.dataset == 'neurogym' else 0.8
 config.actually_use_task_ids = bool(1-args.var4) if config.dataset == 'neurogym' else False
-config.LU_optimizer = 'SGD'  if config.dataset=='split_mnist' else True #  if False SGD 
+# config.LU_optimizer = 'SGD'  if config.dataset=='split_mnist' else 'Adam' 
 if config.dataset=='split_mnist': 
     config.WU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
     config.WU_optimizer_lr_multiplier = float(args.var3) 
@@ -212,7 +212,7 @@ if config.load_saved_rnn1:
     os.makedirs('./files/'+exp_name, exist_ok=True)
 else: # if no pre-trained network proceed with the main training loop.
     ###############################################################################################################
-    if config.use_rehearsal:
+    if config.use_rehearsal:   # Rehearsal sequence paradigm used for split MNIST
         task_seq = []
         rehearsal_multiple = [2] * (config.no_of_tasks-2) + [20] # 1 2  1 2 3     1 2 3 4 
         task_sub_seqs = [[config.tasks_id_name[i] for i in range(s)] for s in range(2, args.no_of_tasks+1)] # interleave tasks and add one task at a time
@@ -224,7 +224,7 @@ else: # if no pre-trained network proceed with the main training loop.
         task_seq+=sub_seq # One additional final rehearsal, 
         # task_seq+=sub_seq # yet another additional final rehearsal, 
         testing_log, training_log, net = train(config, net, task_seq , testing_log, training_log , step_i = 0 )
-    else:
+    else:  # Training paradigm for Neurogym tasks starts with no LUs, then longer blocks, then shorter blocks and detect convergence. 
         # Training Phases
         # Train with WU first
         first_phase_multiple = 2
@@ -269,26 +269,9 @@ else: # if no pre-trained network proceed with the main training loop.
         cog_net.to(config.device)
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
-        testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = step_i )
-       
+        testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = step_i )  
 
-if config.higher_order:
-    config.train_to_criterion = True
-    config.random_rehearsals = 5 if config.paradigm_sequential else 4000 # if needing to train the network from scratch use this number of rehearsals to prepare for the latent updates phase
 
-if config.higher_order:
-    # cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.output_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
-    cog_net = Cognitive_Net(input_size=10+config.hidden_size+config.md_size, hidden_size=config.cog_net_hidden_size, output_size = config.md_size)
-    cog_net.to(config.device)
-
-    step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
-    training_log.start_optimizing_at , testing_log.start_optimizing_at = step_i, step_i
-    
-    if config.paradigm_shuffle:
-        config.print_every_batches = 10
-        config.train_to_criterion = True
-        config.max_trials_per_task = 80000
-    testing_log, training_log, net = optimize(config, net, cog_net, task_seq_optimize, testing_log, training_log, step_i = step_i )
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)
@@ -297,10 +280,7 @@ print('testing logs saved to : '+ './files/'+ config.exp_name+f'/testing_log_{co
 
 ## Plots
 from analysis import visualization as viz
-
 # viz.plot_accuracies(config, training_log=training_log, testing_log=testing_log)
-
-# if config.higher_order and not config.optimize_policy:
 viz.plot_long_term_cluster_discovery(config, training_log, testing_log)
 # try:
     # viz.plot_credit_assignment_inference(config, training_log=training_log, testing_log=testing_log)

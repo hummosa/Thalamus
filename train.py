@@ -47,7 +47,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[1, 10,20, 30, 40, 50], gamma=0.8)
     
     if not str(net.rnn) == 'GRU(33, 356)':
-        if config.bu_adam:
+        if config.LU_optimizer == 'Adam':
             bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
                 lr=config.lr*config.lr_multiplier, weight_decay=(config.lr/10)*config.weight_decay_multiplier)
                 # adding l2 reg (weeight decay) with an order of magnitude lower than lr.
@@ -288,7 +288,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             print('exluding: ', name)
     policy_optimizer = torch.optim.Adam(training_params, lr=config.lr)
 
-    if config.bu_adam:
+
+    if config.LU_optimizer == 'Adam':
         bu_optimizer = torch.optim.Adam([tp[1] for tp in net.named_parameters() if tp[0] == 'rnn.md_context_id'], 
             lr=config.lr*config.lr_multiplier, weight_decay=(config.lr/10)*config.weight_decay_multiplier)
             # adding l2 reg (weeight decay) with an order of magnitude lower than lr.

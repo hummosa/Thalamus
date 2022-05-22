@@ -119,11 +119,11 @@ class BaseConfig(object):
             self.output_size = 17
             self.tau= 200
             self.lr = 1e-3
-            self.lr_multiplier = 10.0
             self.weight_decay_multiplier = 1.0
-            self.WU_optimizer_lr_multiplier = 1.0
             self.WU_optimizer = 'Adam' # 'SGD'
+            self.WU_optimizer_lr_multiplier = 1.0
             self.LU_optimizer = 'Adam'
+            self.lr_multiplier = 10.0
 
         elif dataset == 'split_mnist':
             self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
@@ -134,11 +134,11 @@ class BaseConfig(object):
             self.hidden_size = 400
             self.output_size = 2
             self.lr = 1e-3
-            self.lr_multiplier = 100.0
             self.weight_decay_multiplier = 1000.0
-            self.WU_optimizer_lr_multiplier = 1.0
             self.WU_optimizer = 'Adam' # 'SGD'
-            self.LU_optimizer = 'SGD' # 'Adam'
+            self.WU_optimizer_lr_multiplier = 1.0
+            self.LU_optimizer = 'Adam' # SGD
+            self.lr_multiplier = 1.0 # 100.0
 
             self.LU_trigger_threshold= 0.08
             self.WU_trigger_threshold= 0.1
