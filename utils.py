@@ -205,13 +205,15 @@ def get_trials_batch(envs, batch_size, config, return_dist_mean_for_Nassar_tasks
     if config.dataset in ['split_mnist', 'rotated_mnist']:
         env = envs
         batch = next(env)
-        inputs, labels = batch
+        inputs, labels = batch[0][:batch_size], batch[1][:batch_size]
+    
         if config.model == 'RNN':
             inputs.squeeze_().permute([1,0,2])
             zeros = torch.zeros([inputs.shape[0], inputs.shape[1], config.output_size]) # batch, time sequence, one-hot for 10 classes.
             zeros[:, -1, :] = F.one_hot(labels,config.output_size).permute([1,0,2])
         elif config.model == 'MLP':
             inputs.squeeze_()
+            if batch_size==1: inputs.unsqueeze_(dim=0)
             zeros = F.one_hot(labels,config.output_size).float()
         labels = zeros
     else: # Otherscd
@@ -472,11 +474,10 @@ def build_env(config, envs, testing_envs=None):
         print("\nPreparing the data...")
         (train_datasets, test_datasets), data_config, classes_per_task = get_multitask_experiment(
         name='splitMNIST', scenario='domain', tasks=5, 
-        verbose=True, exception=True , )
+        verbose=True, exception=True , contextual = config.contextual_split_mnist)
         for task_id, task_name in config.tasks_id_name:
             envs[task_id]= iter(cycle(DataLoader(dataset=train_datasets[task_id], batch_size=config.batch_size, shuffle=True, drop_last=True)))
-        assert (testing_envs is not None)
-        for task_id, task_name in config.tasks_id_name:
+            assert (testing_envs is not None)
             testing_envs[task_id]= iter(cycle(DataLoader(dataset=test_datasets[task_id], batch_size=config.batch_size, shuffle=True, drop_last=True)))
 
     if config.dataset == 'rotated_mnist':

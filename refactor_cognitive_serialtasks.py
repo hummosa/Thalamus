@@ -46,20 +46,21 @@ from tqdm import tqdm, trange
 
 import argparse
 my_parser = argparse.ArgumentParser(description='Train neurogym tasks sequentially')
-my_parser.add_argument('exp_name',  default='cluster_3', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
+my_parser.add_argument('exp_name',  default='cluster_4', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('exp_name',  default='cluster_convergence4/random_gates_mul', type=str, nargs='?', help='Experiment name, also used to create the path to save results')
 # my_parser.add_argument('--experiment_type', default='shuffle_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='noisy_mean', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='shrew_task', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # to run shrew task: (1) set model to GRUB, (2) consider nll or mse main loss, (3) switch train.py to use net invoke command with gt.
 # my_parser.add_argument('--experiment_type', default='same_net', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+my_parser.add_argument('--experiment_type', default='few_shot_testing', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
+# my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
-my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0.0, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--seed', default=3, nargs='?', type=int,  help='Seed')
+my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
-my_parser.add_argument('--var3',  default=100.0, nargs='?', type=float, help='actually use task_ids')
-my_parser.add_argument('--var4', default=1.0, nargs='?', type=float,  help='gates sparsity')
+my_parser.add_argument('--var3',  default=1.0, nargs='?', type=float, help='actually use task_ids')
+my_parser.add_argument('--var4', default=100, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--no_of_tasks', default=4, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
@@ -118,6 +119,23 @@ if args.experiment_type == 'shrew_task' or args.experiment_type == 'noisy_mean':
     config.train_to_criterion = False
     config.abort_rehearsal_if_accurate = False
     config.one_batch_optimization = False
+if args.experiment_type == 'few_shot_testing': 
+    config = Gates_mul_config(dataset_name)
+    config.few_shot_data_N = int(args.var4)
+    if int(args.var4) == 0: # if no of shots 0 use blind testing for all tasks. 
+        config.few_shot_task_inference = False
+    else:
+        config.few_shot_task_inference = True
+    if config.dataset=='split_mnist': 
+        config.LU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
+        config.LU_optimizer_lr_multiplier = float(args.var3) 
+        # config.weight_decay_multiplier = 500.0
+            
+if args.experiment_type == 'optim_lr_mult': 
+    config = Gates_mul_config(dataset_name)
+    if config.dataset=='split_mnist': 
+        config.WU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
+        config.WU_optimizer_lr_multiplier = float(args.var3) 
 ############################################
 config.set_strings( exp_name)
 config.exp_signature = f"{args.var1:1.1f}_{args.var3:1.1f}_{args.var4:1.1f}_"
@@ -132,7 +150,7 @@ config.md_context_id_amplifier = 1.
 
 config.train_gates = False
 config.save_model = False
-config.save_model = True
+# config.save_model = True
 
 config.optimize_policy  = False
 config.optimize_td      = False
@@ -143,9 +161,7 @@ config.max_no_of_latent_updates = 1000
 config.gates_sparsity = 0.5 if config.dataset == 'neurogym' else 0.8
 config.actually_use_task_ids = bool(1-args.var4) if config.dataset == 'neurogym' else False
 # config.LU_optimizer = 'SGD'  if config.dataset=='split_mnist' else 'Adam' 
-if config.dataset=='split_mnist': 
-    config.WU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
-    config.WU_optimizer_lr_multiplier = float(args.var3) 
+
 config.use_weight_updates = True
 config.detect_convergence = False
 
@@ -170,13 +186,10 @@ config.higher_order = False # not config.save_model
 config.higher_cog_test_multiple = 2
 config.training_loss = 'mse'
 
-
-
 # add, rehearse the md_loop then at the end, one novel task from the unlearned pile:
 novel_task_ids = get_novel_task_ids(args, rng, config) 
 
 config.load_saved_rnn1 = not config.save_model
-
 
 ###--------------------------Training configs--------------------------###
 if not args.seed == 0: # if given seed is not zero, shuffle the task_seq

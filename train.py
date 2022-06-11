@@ -118,7 +118,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # inputs.refine_names('timestep', 'batch', 'input_dim')
             # labels.refine_names('timestep', 'batch', 'output_dim')
             if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
-                context_id = F.one_hot(torch.tensor([task_id]* config.batch_size), config.md_size).type(torch.float)
+                context_id = F.one_hot(torch.tensor([task_id]* inputs.shape[0]), config.md_size).type(torch.float)
             ########################################################################
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             ########################################################################
@@ -135,7 +135,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                 training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
                 context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
                 training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
-                print(f'============== Latent update improvement: {training_log.lu_stamps_acc_improve[-1] } LU_acc: {bu_running_acc}   ACC {acc}')
+                # print(f'============== Latent update improvement: {training_log.lu_stamps_acc_improve[-1] } LU_acc: {bu_running_acc}   ACC {acc}')
                 ###############
             if converged and (bu_running_acc < criterion_accuaracy -0.1): #If converged, then tasks should be solved. If they are not, try to resample the latent for a number of attempts.
                 while( lu_attempts and (bu_running_acc < criterion_accuaracy -0.1)):
@@ -148,7 +148,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
                     training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
                     context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
                     training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
-                    print(f'============  Latent update improvement: {training_log.lu_stamps_acc_improve[-1] }')
+                    # print(f'============  Latent update improvement: {training_log.lu_stamps_acc_improve[-1] }')
                 
 
             if (not (recall_test_context_id is None)) and config.test_latent_recall:
@@ -203,7 +203,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
                 plot_long_term_cluster_discovery(config, training_log, testing_log)
                 # test_in_training(config, net, testing_log, training_log, step_i, envs)
-                if not config.dataset == 'neurogym':
+                if not config.dataset == 'neurogym': #takes too long for all 15 neurogym tasks
                     latent_test_in_training(config,
                     net, testing_log, training_log, bu_optimizer,
                     bu_running_acc, criterion_accuaracy, envs, testing_envs, inputs, labels, step_i)
@@ -255,7 +255,7 @@ def latent_updates(max_latent_updates, config, net, testing_log, training_log, b
         bu_accs.append(bu_acc); latent_losses.append(latent_loss)
         bu_running_acc = 0.7 * bu_running_acc + 0.3 * bu_acc
         if bu_running_acc > (criterion_accuaracy-0.1) and ((latents_to_criterion ==0)): #stop optim if reached criter
-            print(f'LU solved task at trial stamp: {training_log.stamps[-1]}',)
+            # print(f'LU solved task at trial stamp: {training_log.stamps[-1]}',)
             latents_to_criterion = total_latent_updates
             # break
         # if (total_latent_updates == int(config.no_latent_updates//2)): # if LUs are not getting anywhere, assume stuck, resample randomly a new md embedding and try again.
@@ -343,9 +343,9 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
         config.one_batch_success = False
         for i in training_bar:
 
-            if config.one_batch_optimization and not config.one_batch_success:
-                if i == 0: # only get one batch of trials at the outset and keep reiterating on them. 
-                    inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
+            if config.few_shot_task_inference and not config.one_batch_success:
+                if i == 0: # only get onefew_shot_data_N batch of trials at the outset and keep reiterating on them. 
+                    inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.few_shot_data_N)
             else:
                 inputs, labels, _ = get_trials_batch(envs=env, config = config, batch_size = config.batch_size)
 
@@ -411,7 +411,8 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             # context_id = config.optimize_bu * bu_context_id +\
             #     config.optimize_td * td_context_id + config.optimize_policy * policy_context_id 
             
-            outputs, rnn_activity = net(inputs, sub_id=context_id)
+            current_batch_size = inputs.shape[0]
+            outputs, rnn_activity = net(inputs, sub_id=context_id[:current_batch_size])
             acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             
             buffer_acts.append(rnn_activity.detach().cpu().numpy().mean(0))
@@ -491,7 +492,7 @@ def md_error_loop(config, net, training_log, criterion, bu_optimizer, inputs, la
     
     bu_context_id = net.rnn.md_context_id    
     bu_context_id = net.latent_activation_function(bu_context_id.float(), dim=1 ) # /config.gates_divider 
-    bu_context_id = bu_context_id.repeat([config.batch_size, 1])
+    # bu_context_id = bu_context_id.repeat([inputs.shape[0], 1])
     bu_context_id = bu_context_id.to(config.device)
     bu_context_id.requires_grad_()
     # training_log.bu_context_ids.append(bu_context_id.detach().cpu().numpy())
@@ -544,13 +545,17 @@ def latent_test_in_training(config,
 
         test_task_context = torch.rand_like(net.rnn.md_context_id.data) # resample randomly
         net.rnn.md_context_id.data = test_task_context.to(config.device)
-        inputs, labels,_ = get_trials_batch(env, config.test_num_trials, config, test_batch=True)
-        max_latent_updates = config.test_no_latent_updates
-        bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(max_latent_updates,config,
-         net, testing_log, training_log, bu_optimizer,
-         bu_running_acc, criterion_accuaracy, envs, inputs, labels)
-        context_id_finalized = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
-        
+        if config.few_shot_task_inference: 
+            inputs, labels,_ = get_trials_batch(env, config.few_shot_data_N, config, test_batch=True)
+            max_latent_updates = config.test_no_latent_updates 
+            bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(max_latent_updates,config,
+            net, testing_log, training_log, bu_optimizer,
+            bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+            context_id_finalized = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
+        else: # blind testing means testing with random latents not optimized with LU.
+            test_task_context = torch.rand_like(net.rnn.md_context_id.data) # resample randomly
+            context_id_finalized = net.latent_activation_function(test_task_context, dim=1).to(config.device)
+            total_latent_updates = 0
         if config.dataset == 'split_mnist':
             inputs, labels,_ = get_trials_batch(testing_env, config.test_num_trials, config, test_batch=True)
             

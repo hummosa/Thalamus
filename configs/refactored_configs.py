@@ -50,8 +50,10 @@ class BaseConfig(object):
         self.paradigm_shuffle = False
         self.paradigm_sequential = not self.paradigm_shuffle
         self.paradigm_alternate = False
-        self.one_batch_optimization = False  # Use only one batch to infer task rule input. 
-        self.abort_rehearsal_if_accurate
+        self.one_batch_optimization = True  # Use only one batch to infer task rule input. 
+        self.few_shot_task_inference = True
+        self.few_shot_data_N = self.batch_size
+        self.abort_rehearsal_if_accurate = False
         self.random_rehearsals = 0
         self.use_latent_updates = True
         self.use_weight_updates = True
@@ -126,7 +128,7 @@ class BaseConfig(object):
             self.lr_multiplier = 10.0
 
         elif dataset == 'split_mnist':
-            self._tasks= [f'smnist.class{i}-v0' for i in range(5) ] 
+            self._tasks= [f'smnist.task{i}-v0' for i in range(5) ] 
             # RNN model
             self.md_size = 10 #len(self.tasks)
             self.model = 'MLP'
@@ -135,6 +137,7 @@ class BaseConfig(object):
             self.output_size = 2
             self.lr = 1e-3
             self.weight_decay_multiplier = 1000.0
+            self.contextual_split_mnist = False
             self.WU_optimizer = 'Adam' # 'SGD'
             self.WU_optimizer_lr_multiplier = 1.0
             self.LU_optimizer = 'Adam' # SGD
@@ -149,7 +152,7 @@ class BaseConfig(object):
             self.print_every_batches =  100
 
         elif dataset == 'rotated_mnist':
-            self._tasks= [f'smnist.class{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 
+            self._tasks= [f'smnist.task{i:03d}-v0' for i in [0, 30, 60, 90, 150, 200, 250, 290, 320, 350] ] 
 
             # RNN model
             self.input_size = 28

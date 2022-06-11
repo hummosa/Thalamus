@@ -144,10 +144,13 @@ def plot_thalamus_accuracies( config, training_log, testing_log):
     # axes[0].text(400, 1.7, 'Tasks being trained -->', color= 'black', fontsize=6 ,)
     # axes[4].text(-0.1, 0.1, 'Accuracy on other tasks via latent updates', color= 'black', fontsize=6 ,rotation=90, transform=axes[4].transAxes)
     axes[-1].set_xlabel('Trials (x100)')
-    final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
-    print('final avg acc', final_accuracy_average)
-        
-    final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
+    try:
+        final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
+        print('final avg acc', final_accuracy_average)
+            
+        final_accuracy_average = np.mean(list(testing_log.accuracies[-1].values()))
+    except:
+        final_accuracy_average = 0
     identifiers = f'{training_log.stamps[-1]}_{final_accuracy_average:1.2f}'
     plt.savefig('./files/'+ config.exp_name+f'/acc_summary_{config.exp_signature}_{identifiers}.jpg', dpi=300)
 
