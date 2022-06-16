@@ -182,7 +182,10 @@ class Shrew_task(TrialEnv):
         # Sample observation for the next trial
         cues = np.zeros(shape=(self.total_cues) ) 
         if self.no_of_coherent_cues is None:
-            sampled_no_of_coherent_cues = rng.integers((self.total_cues//2)+1, self.total_cues )
+            # difficulties = [self.total_cues, int(self.total_cues//1.1), int(self.total_cues//1.3)]
+            difficulties = [self.total_cues, int(self.total_cues//1.1), int(self.total_cues//1.2)]
+            # sampled_no_of_coherent_cues = rng.integers((self.total_cues//2)+1, self.total_cues )
+            sampled_no_of_coherent_cues = rng.choice(difficulties)
         else:
             sampled_no_of_coherent_cues = self.no_of_coherent_cues
         # print(sampled_no_of_coherent_cues)

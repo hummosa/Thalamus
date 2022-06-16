@@ -63,7 +63,8 @@ class BaseConfig(object):
         self.average_accuracy_criterion = 0.93
         self.accuracy_convergence= False
         self.use_latent_updates_every_trial = False
-        
+        self.divide_gating_to_input_and_recurrence = False # an option for dividing gating for Hierarchical reasoning task
+
         #gates statis
         self.train_gates = False
         self.gates_sparsity = 0.4
@@ -137,6 +138,38 @@ class BaseConfig(object):
             self.output_size = 2
             self.lr = 1e-3
             self.weight_decay_multiplier = 1000.0
+            self.contextual_split_mnist = False
+            self.WU_optimizer = 'Adam' # 'SGD'
+            self.WU_optimizer_lr_multiplier = 1.0
+            self.LU_optimizer = 'Adam' # SGD
+            self.lr_multiplier = 1.0 # 100.0
+
+            self.LU_trigger_threshold= 0.08
+            self.WU_trigger_threshold= 0.1
+            self.criterion_DMfam = 0.86
+            self.accuracy_momentum = 0.6    # how much of previous test accuracy to keep in the newest update.
+            self.criterion = 0.94
+            self.converged_ttc_criterion = int( 2)#len(self._tasks))
+            self.print_every_batches =  100
+        elif dataset == 'hierarchical_reasoning':
+            self._tasks= [
+                'shrew_task_cxt1', 'shrew_task_cxt2',# 'st_hierarchical', #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1'
+                # 'st_hierarchical',# 'shrew_task_cxt1', 'shrew_task_cxt2',  #'shrew_task_audition', 'shrew_task_vision', 'shrew_task_cxt1'
+                ] 
+            # RNN model
+            self.md_size = 10 #len(self.tasks)
+            self.model = 'RNN'
+            self.input_size = 6
+            self.hidden_size = 64
+            self.output_size = 4
+        # elif exp_type == 'noisy_mean':
+        #     self.input_size = 1
+        #     self.hidden_size = 64
+        #     self.output_size = 1
+            self.tau= 200
+            self.divide_gating_to_input_and_recurrence = True
+            self.lr = 1e-3
+            self.weight_decay_multiplier = 1.0
             self.contextual_split_mnist = False
             self.WU_optimizer = 'Adam' # 'SGD'
             self.WU_optimizer_lr_multiplier = 1.0

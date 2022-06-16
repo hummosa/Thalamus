@@ -27,7 +27,7 @@ class CTRNN_MD(nn.Module):
         self.md_size = config.md_size
         self.use_multiplicative_gates = config.use_multiplicative_gates
         self.use_additive_gates = config.use_additive_gates
-
+        self.divide_gating_to_input_and_recurrence = config.divide_gating_to_input_and_recurrence
         self.device = config.device
         self.g = .5 # Conductance for recurrents. Consider higher values for realistic richer RNN dynamics, at least initially.
 
@@ -101,15 +101,31 @@ class CTRNN_MD(nn.Module):
         ext_input = self.input2h(input)
         rec_input = self.h2h(hidden)
 
-        if self.use_multiplicative_gates:
-            batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
-            gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
-            rec_input = torch.multiply( gates, rec_input)
-        if self.use_additive_gates:
-            batch_sub_encoding = sub_id 
-            gates = torch.matmul(batch_sub_encoding.to(self.device), self.add_gates)
-            rec_input = torch.add( gates, rec_input)
-        
+        if self.divide_gating_to_input_and_recurrence:
+            neurons_per_md = sub_id.shape[1]//2
+            mask1, mask2 = torch.zeros_like(sub_id), torch.zeros_like(sub_id)
+            mask1[:, :neurons_per_md] =  torch.ones_like(sub_id)[:, :neurons_per_md]
+            mask2[:, neurons_per_md:] =  torch.ones_like(sub_id)[:, neurons_per_md:]
+            if self.use_multiplicative_gates:
+                batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
+                gates = torch.matmul((mask1 * batch_sub_encoding).to(self.device), self.mul_gates)
+                rec_input = torch.multiply( gates, rec_input)
+                # ext_input = torch.multiply( gates, ext_input)
+            if self.use_additive_gates:
+                batch_sub_encoding = sub_id 
+                gates = torch.matmul((mask2 * batch_sub_encoding).to(self.device), self.add_gates)
+                # rec_input = torch.add( gates, rec_input)
+                ext_input = torch.add( -torch.abs(gates), ext_input)
+        else:  # only gate RNN  
+            if self.use_multiplicative_gates:
+                batch_sub_encoding = sub_id # to prevent from having to output 1 value from softmax # already onehot encoded. Skipping this step. 
+                gates = torch.matmul(batch_sub_encoding.to(self.device), self.mul_gates)
+                rec_input = torch.multiply( gates, rec_input)
+            if self.use_additive_gates:
+                batch_sub_encoding = sub_id 
+                gates = torch.matmul(batch_sub_encoding.to(self.device), self.add_gates)
+                rec_input = torch.add( gates, rec_input)
+            
         pre_activation = ext_input + rec_input
         
         h_new = torch.relu(hidden * self.oneminusalpha + pre_activation * self.alpha)
@@ -227,6 +243,8 @@ class RNN_MD(nn.Module):
             self.rnn = CTRNN_MD(config)    
         elif config.model =='MLP':
             self.rnn = MLP_MD(config)
+        elif config.model =='MLP+RNN':
+            self.rnn = MLP_RNN_MD(config)
         self.drop_layer = nn.Dropout(p=0.05)
         self.fc = nn.Linear(config.hidden_size, config.output_size)
         # self.latent_activation_function = self.normalized_activation

@@ -118,7 +118,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             # inputs.refine_names('timestep', 'batch', 'input_dim')
             # labels.refine_names('timestep', 'batch', 'output_dim')
             if config.actually_use_task_ids and not hasattr(training_log, 'start_testing_at'): #use ids only in the first exposure to the tasks.
-                context_id = F.one_hot(torch.tensor([task_id]* inputs.shape[0]), config.md_size).type(torch.float)
+                context_id = F.one_hot(torch.tensor([task_id]), config.md_size).type(torch.float)
             ########################################################################
             outputs, rnn_activity = net(inputs, sub_id=(context_id/config.gates_divider)+config.gates_offset)
             ########################################################################
