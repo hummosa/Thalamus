@@ -64,7 +64,7 @@ class BaseConfig(object):
         self.accuracy_convergence= False
         self.use_latent_updates_every_trial = False
         self.divide_gating_to_input_and_recurrence = False # an option for dividing gating for Hierarchical reasoning task
-
+        self.actually_use_task_ids = False
         #gates statis
         self.train_gates = False
         self.gates_sparsity = 0.4
@@ -75,7 +75,7 @@ class BaseConfig(object):
         # test & plot
         self.test_every_trials = 500
         self.test_num_trials = self.batch_size
-        self.test_no_latent_updates = 400 
+        self.test_no_latent_updates = self.max_no_of_latent_updates
         self.plot_every_trials = 4000
         self.args= args
     
@@ -138,7 +138,7 @@ class BaseConfig(object):
             self.output_size = 2
             self.lr = 1e-3
             self.weight_decay_multiplier = 1000.0
-            self.contextual_split_mnist = False
+            self.contextual_split_mnist = True
             self.WU_optimizer = 'Adam' # 'SGD'
             self.WU_optimizer_lr_multiplier = 1.0
             self.LU_optimizer = 'Adam' # SGD

@@ -201,7 +201,7 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             training_bar.set_description('ls, acc: {:0.3F}, {:0.2F} '.format(loss.item(), acc)+ config.human_task_names[task_id])
 
             if step_i % config.print_every_batches == (config.print_every_batches - 1):
-                plot_long_term_cluster_discovery(config, training_log, testing_log)
+                plot_long_term_cluster_discovery(config, training_log, testing_log); plt.close('all')
                 # test_in_training(config, net, testing_log, training_log, step_i, envs)
                 if not config.dataset == 'neurogym': #takes too long for all 15 neurogym tasks
                     latent_test_in_training(config,
