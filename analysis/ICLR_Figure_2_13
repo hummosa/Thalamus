@@ -291,10 +291,7 @@
      ]
     }
    ],
-   "source": [
-    "solved_idx=(np.array(training_log.trials_to_crit[1:]) !=99) # tasks that wehere actually solved\n",
-    "print(f'solved tasks ratio {np.sum(solved_idx)/solved_idx.size:2.1f}')"
-   ]
+   "source": []
   },
   {
    "cell_type": "code",
@@ -303,6 +300,9 @@
    "metadata": {},
    "outputs": [],
    "source": [
+    "solved_idx=(np.array(training_log.trials_to_crit[1:]) !=99) # tasks that wehere actually solved\n",
+    "print(f'solved tasks ratio {np.sum(solved_idx)/solved_idx.size:2.1f}')\n",
+    "\n",
     "end_block_indexes = np.array(training_log.switch_trialxxbatch[1:]) -1 # indexes for the last trial in each block, right before reaching crit. ignore the first switch recorded at 0.\n",
     "end_block_indexes = end_block_indexes[solved_idx]\n",
     "# print(end_block_indexes)\n",
@@ -579,7 +579,7 @@
    "name": "python",
    "nbconvert_exporter": "python",
    "pygments_lexer": "ipython3",
-   "version": "3.8.13"
+   "version": "3.8.13 (default, Mar 28 2022, 11:38:47) \n[GCC 7.5.0]"
   }
  },
  "nbformat": 4,

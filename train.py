@@ -73,11 +73,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
     bar_tasks = tqdm(task_seq)
     for (task_id, task_name) in bar_tasks:
         # optimizer = torch.optim.SGD(training_params, lr=config.lr*10, momentum=0.99)
-            
-        if (converged):  # after converged. Run tasks one more juist for a demo and them move on
-            tasks_after_converged-=1
-            if tasks_after_converged == 0:
-                break
+        if False: # Turning this off so that converged only stops weight updates, then can evaluate tsne for ICLR.           
+            if (converged):  # after converged. Run tasks one more juist for a demo and them move on
+                tasks_after_converged-=1
+                if tasks_after_converged == 0:
+                    break
         #if the last task in shuffle training_ extend it to 400 trials
         task_id = int(task_id)
         env = envs[int(task_id)]
@@ -126,7 +126,11 @@ def train(config, net, task_seq, testing_log, training_log, step_i  = 0):
             acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             
             # if acc is < running_acc by 0.2. run optim and get a new context_id
-            if config.use_latent_updates and config.use_latent_updates_every_trial: bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(1, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+            if config.use_latent_updates and config.use_latent_updates_every_trial: 
+                bu_running_acc, context_id_after_lu, total_latent_updates = latent_updates(config.use_latent_updates_every_trial, config, net, testing_log, training_log, bu_optimizer, bu_running_acc, criterion_accuaracy, envs, inputs, labels)
+                training_log.latents_to_crit[-1] += total_latent_updates # add the total number of latent updates
+                context_id = net.latent_activation_function(torch.from_numpy(context_id_after_lu ), dim=1).to(config.device)
+                training_log.lu_stamps_acc_improve.append( (step_i, bu_running_acc- acc))
             training_log.md_context_ids.append(context_id.detach().cpu().numpy())
             if ((running_acc-acc) > config.LU_trigger_threshold ) and config.use_latent_updates: # assume some novel something happened or (converged and (bu_running_acc<(criterion_accuaracy-.1)))
                 max_latent_updates = int(min(15 * len(training_log.trials_to_crit)-10, config.max_no_of_latent_updates))
@@ -411,7 +415,7 @@ def optimize(config, net, cog_net, task_seq, testing_log,  training_log,step_i  
             # context_id = config.optimize_bu * bu_context_id +\
             #     config.optimize_td * td_context_id + config.optimize_policy * policy_context_id 
             
-            current_batch_size = inputs.shape[0]
+            current_batch_size = inputs.shape[1] # to adapt to truncated last batch in the dataset. 
             outputs, rnn_activity = net(inputs, sub_id=context_id[:current_batch_size])
             acc  = accuracy_metric(outputs.detach(), labels.detach(), config)
             

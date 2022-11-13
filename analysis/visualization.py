@@ -237,7 +237,10 @@ def plot_long_term_cluster_discovery( config, training_log, testing_log):
     # print(ax.get_position())
     ax.set_position(mpl.transforms.Bbox([[0.125,0.125],[.90, 0.33]]))
     identifiers = 9
-    plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
+    try:
+        plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}_{training_log.training_duration:.2f}.jpg', dpi=200)
+    except:
+        plt.savefig('./files/'+ config.exp_name+f'/BU_Long_cluster_discovery_{config.exp_signature}_{identifiers}.jpg', dpi=200)
 
 def plot_cluster_discovery( config, bubuffer, training_log, testing_log, bu_accs, latent_losses):
     if len(training_log.bu_context_ids) > 0: context_ids =  training_log.bu_context_ids

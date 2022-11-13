@@ -57,11 +57,11 @@ my_parser.add_argument('--experiment_type', default='few_shot_testing', nargs='?
 # my_parser.add_argument('--experiment_type', default='random_gates_mul', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 # my_parser.add_argument('--experiment_type', default='random_gates_rehearsal_no_train_to_criterion', nargs='?', type=str, help='Which experimental or setup to run: "pairs") task-pairs a b a "serial") Serial neurogym "interleave") Interleaved ')
 my_parser.add_argument('--seed', default=4, nargs='?', type=int,  help='Seed')
-my_parser.add_argument('--var1',  default=0.0, nargs='?', type=float, help='no of loops optim task id')
+my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='no of loops optim task id')
 # my_parser.add_argument('--var2', default=-0.3, nargs='?', type=float, help='the ratio of active neurons in gates ')
 my_parser.add_argument('--var3',  default=100.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=100, nargs='?', type=float,  help='gates sparsity')
-my_parser.add_argument('--no_of_tasks', default=10, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--no_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -71,8 +71,8 @@ os.makedirs('./files/'+exp_name, exist_ok=True)
 rng = np.random.default_rng(int(args.seed))
 
 ### Dataset
-# dataset_name = 'neurogym' #'split_mnist'  'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
-dataset_name = 'split_mnist' # 'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
+dataset_name = 'neurogym' #'split_mnist'  'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
+# dataset_name = 'split_mnist' # 'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
 if args.experiment_type == 'shrew_task':
     dataset_name = 'hierarchical_reasoning'#'nassar'
 config = SerialConfig(dataset_name) 
@@ -134,7 +134,20 @@ if args.experiment_type == 'few_shot_testing':
     if config.dataset=='split_mnist': 
         config.LU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
         config.LU_optimizer_lr_multiplier = float(args.var3) 
-        # config.weight_decay_multiplier = 500.0
+    
+if args.experiment_type == 'iclr_testing': 
+    config = Gates_mul_config(dataset_name)
+    config.few_shot_data_N = 100
+    # if int(args.var4) == 0: # if no of shots 0 use blind testing for all tasks. 
+    #     config.few_shot_task_inference = False
+    # else:
+    #     config.few_shot_task_inference = True
+    # if config.dataset=='split_mnist': 
+    #     config.LU_optimizer = 'Adam' if bool(args.var1) else 'SGD'
+    #     config.LU_optimizer_lr_multiplier = float(args.var3) 
+    # if config.dataset=='neurogym':
+    config.train_gates = bool(args.var1)
+    config.gates_std = float(args.var4) 
             
 if args.experiment_type == 'optim_lr_mult': 
     config = Gates_mul_config(dataset_name)
@@ -153,7 +166,7 @@ config.gates_divider = 1.0
 config.gates_offset = 0.0
 config.md_context_id_amplifier = 1.
 
-config.train_gates = False
+# config.train_gates = False
 config.save_model = False
 config.save_model = True
 
@@ -164,6 +177,8 @@ config.cog_net_hidden_size = 100
 
 config.max_no_of_latent_updates = 1000
 config.gates_sparsity = 0.5 if config.dataset == 'neurogym' else 0.8
+if args.experiment_type == 'iclr_testing': 
+    config.gates_sparsity = float(args.var3)  # remove gates sparsity to test Wz drawn from a gaussian
 # config.actually_use_task_ids = bool(1-args.var4) if config.dataset == 'neurogym' else False
 # config.LU_optimizer = 'SGD'  if config.dataset=='split_mnist' else 'Adam' 
 
@@ -210,6 +225,7 @@ net = RNN_MD(config)
 net.to(config.device)
 training_log = SerialLogger(config=config)
 testing_log = SerialLogger(config=config)
+begin_time = time.perf_counter() 
 
 if config.load_saved_rnn1:
     net.load_state_dict(torch.load(config.saved_model_path))
@@ -253,17 +269,18 @@ else: # if no pre-trained network proceed with the main training loop.
 
         # Train with WU+LU but full blocks
         second_phase_multiple = 3
-        config.use_latent_updates = bool(args.var1) if config.dataset == 'neurogym' else True
-        config.use_latent_updates_every_trial = False
+        config.use_latent_updates = True # bool(args.var1) if config.dataset == 'neurogym' else True
+        config.use_latent_updates_every_trial = False # or 0 
+        # config.use_latent_updates_every_trial = 1 # zero is false, but then the number determines how many LUs everytrial.
         task_seq2 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * second_phase_multiple
         testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
         # testing_log, training_log, net = train(config, net, task_seq2, testing_log, training_log , step_i = 0 )
 
         # Train with WU+LU Train to Crit
-        third_phase_multiple = 20 if not (args.no_of_tasks ==10) else 20
+        third_phase_multiple = 30 if not (args.no_of_tasks ==10) else 20
         task_seq3 = [config.tasks_id_name[i] for i in range(args.no_of_tasks)]  * third_phase_multiple
         config.train_to_criterion = False
-        config.detect_convergence = False if not (args.no_of_tasks ==10) else True
+        config.detect_convergence = False if not (args.no_of_tasks ==10) else True #because otherwise 10 tasks takes a really long time.
         config.accuracy_convergence = False
         config.max_trials_per_task = int(100*config.batch_size) if config.dataset=='neurogym' else  int(100*config.batch_size)
         testing_log, training_log, net = train(config, net, task_seq3, testing_log, training_log , step_i = training_log.stamps[-1]+1 )
@@ -289,7 +306,14 @@ else: # if no pre-trained network proceed with the main training loop.
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
         testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = step_i )  
 
+# log some info. 
+# exps.append({'var1': var1, 'var3': var3, 'no_of_tasks': no_of_tasks, 'seed': seed, 'var4': var4})
+# novel_end_accs = np.array(training_log.accuracies)[np.array(training_log.switch_trialxxbatch[-len(novel_task_ids):])-1]
 
+# log time to train:
+end_time = time.perf_counter() 
+training_duration = end_time-begin_time
+training_log.training_duration = training_duration/60
 
 np.save('./files/'+ config.exp_name+f'/testing_log_{config.exp_signature}.npy', testing_log, allow_pickle=True)
 np.save('./files/'+ config.exp_name+f'/training_log_{config.exp_signature}.npy', training_log, allow_pickle=True)

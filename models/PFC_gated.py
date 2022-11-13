@@ -224,7 +224,7 @@ class MLP_MD(nn.Module):
             x_gated = torch.add( gates, x)
 
         x = F.relu(x_gated)
-        return (x, 0)
+        return (x, 0) # the additional 0 just for compatibility with the return from RNN
                 
 
 class RNN_MD(nn.Module):
