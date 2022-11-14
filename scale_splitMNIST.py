@@ -17,7 +17,7 @@ no_of_tasks_to_run = [5]
 # exp_sig = 'cluster_neurogym_tasks10_to_convergence2'
 exp_sig = 'cluster_iclr_Wz_tests2'
 
-Seeds = list(range(3,12))#[6, 7, 8, 10,  14, ]#range(11,15)
+Seeds = list(range(10,14))#[6, 7, 8, 10,  14, ]#range(11,15)
 Var1 = [0,1] # train or not LU optim SGD, ADam 
 Var2 = no_of_tasks_to_run # used to pass no of exp  #[-0.3] #MDprob, currently gaussian cuttoff #[0.0001, 0.001]#range(0,3, 1) #gates mean
 Var3 = [0., 0.5,]# gates sparsity LU LR multiplier ,100] # [(x/10) for x in range(1,5, 1)] #gates_std  #, 3.5, 4, 4.5, 5, 5.5, 6, 6.5]
