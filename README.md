@@ -2,7 +2,6 @@
 
 Algorithm Thalamus code for ICLR submission. 
 
-THIS REPOSITORY IS ACTIVELY BEING ORGANIZED AND CLEANED UP!
 
 Packages required for datasets used, please follow each repository instructions for instalation in the same project folder. Cloning each repo is sufficient.
 
@@ -13,6 +12,8 @@ and
 Continual leanring for split MNIST dataset: https://github.com/GMvandeVen/continual-learning
 
 python Run.py to run Thalamus on a series of tasks. 
+
+Note that the files are actively being organized and will change within a few days.
 
 It takes the following arguments (or can just omit and use default values):
 * dataset: string, pass 'neurogym' or 'split_mnist' to use either dataset. Default 'neurogym'
