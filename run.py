@@ -62,6 +62,7 @@ my_parser.add_argument('--var1',  default=1.0, nargs='?', type=float, help='no o
 my_parser.add_argument('--var3',  default=100.0, nargs='?', type=float, help='actually use task_ids')
 my_parser.add_argument('--var4', default=100, nargs='?', type=float,  help='gates sparsity')
 my_parser.add_argument('--no_of_tasks', default=5, nargs='?', type=int, help='number of tasks to train on')
+my_parser.add_argument('--dataset', default='neurogym', nargs='?', type=str, help='dataset to use') # 'split_mnist'
 
 # Get args and set config
 args = my_parser.parse_args()
@@ -71,7 +72,7 @@ os.makedirs('./files/'+exp_name, exist_ok=True)
 rng = np.random.default_rng(int(args.seed))
 
 ### Dataset
-dataset_name = 'neurogym' #'split_mnist'  'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
+dataset_name = args.dataset #'neurogym' #'split_mnist'  'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
 # dataset_name = 'split_mnist' # 'rotated_mnist' 'neurogym' 'hierarchical_reasoning' 'nassar'
 if args.experiment_type == 'shrew_task':
     dataset_name = 'hierarchical_reasoning'#'nassar'
@@ -305,10 +306,6 @@ else: # if no pre-trained network proceed with the main training loop.
         step_i = training_log.stamps[-1]+1 if training_log.stamps.__len__()>0 else 0
         training_log.start_testing_at , testing_log.start_testing_at = step_i, step_i
         testing_log, training_log, net = optimize(config, net,cog_net, task_seq3, testing_log, training_log , step_i = step_i )  
-
-# log some info. 
-# exps.append({'var1': var1, 'var3': var3, 'no_of_tasks': no_of_tasks, 'seed': seed, 'var4': var4})
-# novel_end_accs = np.array(training_log.accuracies)[np.array(training_log.switch_trialxxbatch[-len(novel_task_ids):])-1]
 
 # log time to train:
 end_time = time.perf_counter() 
