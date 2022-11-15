@@ -2,11 +2,9 @@
 
 Algorithm Thalamus code for ICLR submission. 
 
-THI REPOSITORY IS ACTIVELY BEING ORGANIZED AND CLEANED UP!
+THIS REPOSITORY IS ACTIVELY BEING ORGANIZED AND CLEANED UP!
 
-Packages required for datasets used:
-
----
+Packages required for datasets used, please follow each repository instructions for instalation in the same project folder. Cloning each repo is sufficient.
 
 Neurogym for cognitive tasks: https://github.com/neurogym/neurogym
 
@@ -17,7 +15,7 @@ Continual leanring for split MNIST dataset: https://github.com/GMvandeVen/contin
 python Run.py to run Thalamus on a series of tasks. 
 
 It takes the following arguments (or can just omit and use default values):
-* dataset: string, pass 'neurogym' or 'split_mnist' to use either dataset.
+* dataset: string, pass 'neurogym' or 'split_mnist' to use either dataset. Default 'neurogym'
 * experiment_name: String. Determines which folder to create and uses this string to identify files saved for the run.
 * no_of_taks: Determines now many tasks to train on. Will automatically test on any remaining tasks using latent updates.
 * Seed: sets seed for RNG.
