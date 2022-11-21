@@ -14,7 +14,7 @@ from torchvision.transforms.functional import rotate
 
 import gym
 import neurogym as ngym
-from Schizophrenia.tasks_coded_in_neurogym import *
+from additional_tasks_coded_in_neurogym import *
 # from analysis.visualization import plot_cluster_discovery, plot_long_term_cluster_discovery
 
 def get_novel_task_ids(args, rng, config):

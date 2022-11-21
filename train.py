@@ -11,7 +11,7 @@ import gym
 import neurogym as ngym
 import matplotlib.pyplot as plt
 from utils import *
-from Schizophrenia.tasks_coded_in_neurogym import *
+from additional_tasks_coded_in_neurogym import *
 import utils
 
 def criterion(output, labels, use_loss='nll'):    # criterion & optimizer
