@@ -1,6 +1,6 @@
 # Thalamus_ICLR
 
-Algorithm Thalamus code for ICLR [paper][https://openreview.net/forum?id=6orC5MvgPBK] [paper]: Thalamus: a brain-inspired algorithm for biologically-plausible continual learning and disentangled representations.
+Algorithm Thalamus code for ICLR paper [Thalamus: a brain-inspired algorithm for biologically-plausible continual learning and disentangled representations.](https://openreview.net/forum?id=6orC5MvgPBK) 
 
 
 Packages required for datasets used, please follow each repository instructions for instalation in the same project folder. Cloning each repo is sufficient.
@@ -32,14 +32,4 @@ Another plot for split MNIST shows accuracy tested with latent updates on all fi
 The analysis folder has the Jupyter notebooks to analyze results and produce the full paper figures. 
 These are being updated and organized actively.
 
-Cite as:
-
-@inproceedings{hummos_thalamus_2023,
-	title = {Thalamus: a brain-inspired algorithm for biologically-plausible continual learning and disentangled representations},
-	shorttitle = {Thalamus},
-	url = {https://openreview.net/forum?id=6orC5MvgPBK&noteId=6Mqrp5qu3z},
-	urldate = {2022-09-06},
-	author = {Hummos, Ali},
-	year = {2023},
-}
 
